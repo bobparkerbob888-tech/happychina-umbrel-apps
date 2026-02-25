@@ -1,0 +1,8 @@
+node_modules/
+.env
+*.db
+data/
+build/
+.DS_Store
+*.rar
+*:Zone.Identifier
