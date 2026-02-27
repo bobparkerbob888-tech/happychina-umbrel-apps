@@ -30,7 +30,7 @@ function Home() {
         <div className="hero-content">
           <h1>Multi-Coin <span className="accent">Mining Pool</span></h1>
           <p className="hero-sub">
-            Mine Bitcoin, Litecoin, Dogecoin, Namecoin, and 8 more coins. Low 1% fee, PPLNS rewards, automatic payouts.
+            Mine Litecoin, Dogecoin, and 9 more Scrypt coins. Low 1% fee, PPLNS rewards, automatic payouts.
           </p>
           <div className="hero-actions">
             <Link to="/getting-started" className="btn btn-primary btn-lg">Start Mining</Link>
@@ -63,7 +63,7 @@ function Home() {
           <div className="feature-card">
             <div className="feature-icon">&#9889;</div>
             <h3>Multi-Algorithm</h3>
-            <p>SHA-256 and Scrypt algorithms supported across 12 coins including Bitcoin, Litecoin, Dogecoin, and more.</p>
+            <p>Scrypt algorithm supported across 11 merged-mined coins including Litecoin, Dogecoin, Bells, and more.</p>
           </div>
           <div className="feature-card">
             <div className="feature-icon">&#128176;</div>
