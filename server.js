@@ -668,9 +668,9 @@ class StratumServer extends EventEmitter {
       client.buffer = lines.pop(); // Keep incomplete line in buffer
 
       for (const line of lines) {
-        if (line.trim()) {
+        const cleanLine = line.replace(/\r/g, ""); if (cleanLine.trim()) {
           try {
-            const message = JSON.parse(line);
+            const message = JSON.parse(cleanLine);
             // Log raw messages from L9 for debugging
             if (!client._logCount) client._logCount = 0;
             if (client._logCount < 3) {
@@ -679,7 +679,7 @@ class StratumServer extends EventEmitter {
             }
             this.handleMessage(client, message);
           } catch (err) {
-            console.error(`[Stratum] Invalid JSON from ${clientId}:`, line);
+            console.error(`[Stratum] Invalid JSON from ${clientId}:`, cleanLine);
           }
         }
       }
