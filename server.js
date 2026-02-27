@@ -1299,8 +1299,8 @@ class StratumServer extends EventEmitter {
       .filter(([, job]) => job.coinId === coinId)
       .sort((a, b) => b[1].createdAt - a[1].createdAt);
 
-    // Keep last 10 jobs per coin
-    for (let i = 10; i < jobEntries.length; i++) {
+    // Keep last 100 jobs per coin
+    for (let i = 100; i < jobEntries.length; i++) {
       this.jobs.delete(jobEntries[i][0]);
     }
   }
