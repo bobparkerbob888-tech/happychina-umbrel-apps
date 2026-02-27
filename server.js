@@ -673,13 +673,13 @@ class StratumServer extends EventEmitter {
             const message = JSON.parse(cleanLine);
             // Log raw messages from L9 for debugging
             if (!client._logCount) client._logCount = 0;
-            if (client._logCount < 3) {
+            if (client._logCount < 20) {
               client._logCount++;
               console.log(`[RAW-IN] ${clientId}: ${line.substring(0, 200)}`);
             }
             this.handleMessage(client, message);
           } catch (err) {
-            console.error(`[Stratum] Invalid JSON from ${clientId}:`, cleanLine);
+            if (err instanceof SyntaxError) { console.error(`[Stratum] Invalid JSON from ${clientId}:`, cleanLine); } else { console.error(`[Stratum] Handler error from ${clientId}:`, err.message, "for:", cleanLine.substring(0,100)); }
           }
         }
       }
@@ -724,9 +724,9 @@ class StratumServer extends EventEmitter {
         this.sendResponse(client, id, true);
         break;
       case 'login':
-        if (msg.params && msg.params.login) {
-          this.handleSubscribe(client, id, [msg.params.agent || 'miner']);
-          this.handleAuthorize(client, id, [msg.params.login, msg.params.pass || 'x']);
+        if (message.params && message.params.login) {
+          this.handleSubscribe(client, id, [message.params.agent || 'miner']);
+          this.handleAuthorize(client, id, [message.params.login, message.params.pass || 'x']);
         } else {
           this.sendResponse(client, id, null, [20, 'Invalid login']);
         }
