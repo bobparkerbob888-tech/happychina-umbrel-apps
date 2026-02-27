@@ -721,6 +721,8 @@ class StratumServer extends EventEmitter {
         this.handleConfigure(client, id, params);
         break;
       case 'mining.extranonce.subscribe':
+        this.sendResponse(client, id, true);
+        break;
       case 'login':
         if (msg.params && msg.params.login) {
           this.handleSubscribe(client, id, [msg.params.agent || 'miner']);
@@ -728,8 +730,6 @@ class StratumServer extends EventEmitter {
         } else {
           this.sendResponse(client, id, null, [20, 'Invalid login']);
         }
-        break;
-        this.sendResponse(client, id, true);
         break;
       default:
         console.log(`[Stratum] Unknown method from ${client.id}: ${method}`);
