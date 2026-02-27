@@ -1,27 +1,297 @@
 services:
+  # === Backend API (Node.js + SQLite) ===
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
-      - "3333-3344:3333-3344"
-    volumes:
-      - pool-data:/app/data
-      - ./frontend/build:/frontend/build:ro
-    env_file:
-      - ./backend/.env
+    image: ghcr.io/bobparkerbob888-tech/happychina-pool-backend:2.1.0
     restart: unless-stopped
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    environment:
+      PORT: '8080'
+      HOST: '0.0.0.0'
+      JWT_SECRET: 'change-this-to-a-random-secret-string'
+      POOL_NAME: 'HappyChina Pool'
+      POOL_FEE: '1.0'
+      DB_PATH: /app/data/pool.db
+      LTC_RPC_HOST: litecoind
+      LTC_RPC_PORT: '9332'
+      LTC_RPC_USER: rpcuser
+      LTC_RPC_PASS: rpcpass
+      DOGE_RPC_HOST: dogecoind
+      DOGE_RPC_PORT: '22555'
+      DOGE_RPC_USER: rpcuser
+      DOGE_RPC_PASS: rpcpass
+      PEPE_RPC_HOST: pepecoind
+      PEPE_RPC_PORT: '29373'
+      PEPE_RPC_USER: rpcuser
+      PEPE_RPC_PASS: rpcpass
+      BELLS_RPC_HOST: bellsd
+      BELLS_RPC_PORT: '19918'
+      BELLS_RPC_USER: rpcuser
+      BELLS_RPC_PASS: rpcpass
+      LKY_RPC_HOST: luckycoind
+      LKY_RPC_PORT: '9918'
+      LKY_RPC_USER: rpcuser
+      LKY_RPC_PASS: rpcpass
+      JKC_RPC_HOST: junkcoind
+      JKC_RPC_PORT: '9772'
+      JKC_RPC_USER: rpcuser
+      JKC_RPC_PASS: rpcpass
+      DINGO_RPC_HOST: dingocoind
+      DINGO_RPC_PORT: '34646'
+      DINGO_RPC_USER: rpcuser
+      DINGO_RPC_PASS: rpcpass
+      SHIC_RPC_HOST: shibacoind
+      SHIC_RPC_PORT: '33863'
+      SHIC_RPC_USER: rpcuser
+      SHIC_RPC_PASS: rpcpass
+      TRMP_RPC_HOST: trumpowd
+      TRMP_RPC_PORT: '33883'
+      TRMP_RPC_USER: rpcuser
+      TRMP_RPC_PASS: rpcpass
+    volumes:
+      - ./data/pool:/app/data
+      - frontend-build:/frontend/build:ro
+      - ./coins.js:/app/src/config/coins.js:ro
+      - ./server.js:/app/src/stratum/server.js:ro
+      - ./daemonRPC.js:/app/src/services/daemonRPC.js:ro
+      - ./blockMonitor.js:/app/src/services/blockMonitor.js:ro
+      - ./shareProcessor.js:/app/src/services/shareProcessor.js:ro
+      - ./paymentProcessor.js:/app/src/services/paymentProcessor.js:ro
+      - ./index.js:/app/src/index.js:ro
+      - ./utcTimestamps.js:/app/src/middleware/utcTimestamps.js:ro
     ports:
-      - "3000:80"
+      - '8080:8080'
+      - '3332-3344:3332-3344'
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      litecoind:
+        condition: service_started
+
+  # === Init: fix permissions + copy frontend build ===
+  init:
+    image: ghcr.io/bobparkerbob888-tech/happychina-pool-frontend:2.1.0
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Copying frontend build files..."
+        cp -r /usr/share/nginx/html/* /frontend-build/
+        echo "Fixing data directory permissions..."
+        chmod -R 777 /data/litecoin 2>/dev/null || true
+        echo "Init complete."
+    volumes:
+      - frontend-build:/frontend-build
+      - ./data/litecoin:/data/litecoin
+
+  # === Frontend (React + Nginx) ===
+  frontend:
+    image: ghcr.io/bobparkerbob888-tech/happychina-pool-frontend:2.1.0
+    restart: unless-stopped
     depends_on:
       - backend
+    ports:
+      - '80:80'
+
+  # === Coin Daemons ===
+  litecoind:
+    image: uphold/litecoin-core:0.21
     restart: unless-stopped
+    stop_grace_period: 15m
+    volumes:
+      - ./data/litecoin:/home/litecoin/.litecoin
+    command:
+      - litecoind
+      - '-server=1'
+      - '-rpcuser=rpcuser'
+      - '-rpcpassword=rpcpass'
+      - '-rpcallowip=0.0.0.0/0'
+      - '-rpcbind=0.0.0.0'
+      - '-rpcport=9332'
+      - '-port=9333'
+      - '-txindex=1'
+      - '-printtoconsole'
+      - '-dbcache=4096'
+      - '-maxconnections=1000'
+      - '-par=4'
+    ports:
+      - '9333:9333'
+
+  dogecoind:
+    image: btcpayserver/dogecoin:1.14.9-amd64
+    restart: unless-stopped
+    stop_grace_period: 15m
+    volumes:
+      - ./data/dogecoin:/home/dogecoin/.dogecoin
+    command:
+      - dogecoind
+      - '-server=1'
+      - '-rpcuser=rpcuser'
+      - '-rpcpassword=rpcpass'
+      - '-rpcallowip=0.0.0.0/0'
+      - '-rpcbind=0.0.0.0'
+      - '-rpcport=22555'
+      - '-port=22556'
+      - '-txindex=1'
+      - '-printtoconsole'
+      - '-dbcache=4096'
+      - '-maxconnections=1000'
+      - '-par=4'
+      - '-addnode=65.108.79.95:22556'
+      - '-addnode=188.40.103.122:22556'
+      - '-addnode=23.88.18.235:22556'
+      - '-addnode=5.9.68.211:22556'
+      - '-addnode=157.173.198.7:22556'
+    ports:
+      - '22556:22556'
+
+  pepecoind:
+    image: pepeenthusiast/pepecoin-core:latest
+    restart: unless-stopped
+    stop_grace_period: 15m
+    volumes:
+      - ./data/pepecoin:/home/pepecoin/.pepecoin
+    command:
+      - pepecoind
+      - '-server=1'
+      - '-rpcuser=rpcuser'
+      - '-rpcpassword=rpcpass'
+      - '-rpcallowip=0.0.0.0/0'
+      - '-rpcbind=0.0.0.0'
+      - '-rpcport=29373'
+      - '-port=29374'
+      - '-printtoconsole'
+      - '-dbcache=4096'
+      - '-par=0'
+      - '-maxconnections=1000'
+    ports:
+      - '29374:29374'
+
+  bellsd:
+    image: ghcr.io/bobparkerbob888-tech/bellscoin:3.0
+    restart: unless-stopped
+    stop_grace_period: 15m
+    volumes:
+      - ./data/bells:/root/.bells
+    command:
+      - '-server=1'
+      - '-rpcuser=rpcuser'
+      - '-rpcpassword=rpcpass'
+      - '-rpcallowip=0.0.0.0/0'
+      - '-rpcbind=0.0.0.0'
+      - '-rpcport=19918'
+      - '-port=19919'
+      - '-printtoconsole'
+      - '-dbcache=4096'
+      - '-maxconnections=1000'
+      - '-par=4'
+    ports:
+      - '19919:19919'
+
+  luckycoind:
+    image: btccom/luckycoin:4.0.1
+    restart: unless-stopped
+    stop_grace_period: 15m
+    volumes:
+      - ./data/luckycoin:/root/.luckycoin
+    command:
+      - /bin/luckycoind
+      - '-server=1'
+      - '-rpcuser=rpcuser'
+      - '-rpcpassword=rpcpass'
+      - '-rpcallowip=0.0.0.0/0'
+      - '-rpcbind=0.0.0.0'
+      - '-rpcport=9918'
+      - '-port=9917'
+      - '-printtoconsole'
+      - '-maxtipage=63072000'
+      - '-dbcache=3072'
+      - '-maxconnections=1000'
+      - '-par=4'
+    ports:
+      - '9917:9917'
+
+  junkcoind:
+    image: btccom/junkcoin:latest
+    restart: unless-stopped
+    stop_grace_period: 15m
+    volumes:
+      - ./data/junkcoin:/root/.junkcoin
+    command:
+      - /usr/local/bin/junkcoind
+      - '-server=1'
+      - '-rpcuser=rpcuser'
+      - '-rpcpassword=rpcpass'
+      - '-rpcallowip=0.0.0.0/0'
+      - '-rpcbind=0.0.0.0'
+      - '-rpcport=9772'
+      - '-port=9771'
+      - '-printtoconsole'
+      - '-dbcache=4096'
+      - '-maxconnections=1000'
+      - '-par=4'
+    ports:
+      - '9771:9771'
+
+  dingocoind:
+    image: ghcr.io/bobparkerbob888-tech/dingocoin:v1.18.0.0
+    restart: unless-stopped
+    stop_grace_period: 15m
+    volumes:
+      - ./data/dingocoin:/root/.dingocoin
+    command:
+      - '-server=1'
+      - '-rpcuser=rpcuser'
+      - '-rpcpassword=rpcpass'
+      - '-rpcallowip=0.0.0.0/0'
+      - '-rpcbind=0.0.0.0'
+      - '-rpcport=34646'
+      - '-port=33117'
+      - '-printtoconsole'
+      - '-dbcache=4096'
+      - '-maxconnections=1000'
+      - '-par=4'
+    ports:
+      - '33117:33117'
+
+  shibacoind:
+    image: ghcr.io/bobparkerbob888-tech/shibacoin:1.2.1
+    restart: unless-stopped
+    stop_grace_period: 15m
+    volumes:
+      - ./data/shibacoin:/root/.shibacoin
+    command:
+      - '-server=1'
+      - '-rpcuser=rpcuser'
+      - '-rpcpassword=rpcpass'
+      - '-rpcallowip=0.0.0.0/0'
+      - '-rpcbind=0.0.0.0'
+      - '-rpcport=33863'
+      - '-port=33864'
+      - '-printtoconsole'
+      - '-dbcache=4096'
+      - '-maxconnections=1000'
+      - '-par=4'
+    ports:
+      - '33864:33864'
+
+  trumpowd:
+    image: ghcr.io/bobparkerbob888-tech/trumpow:1.0
+    restart: unless-stopped
+    stop_grace_period: 15m
+    volumes:
+      - ./data/trumpow:/root/.trumpow
+    command:
+      - '-server=1'
+      - '-rpcuser=rpcuser'
+      - '-rpcpassword=rpcpass'
+      - '-rpcallowip=0.0.0.0/0'
+      - '-rpcbind=0.0.0.0'
+      - '-rpcport=33883'
+      - '-port=33884'
+      - '-printtoconsole'
+      - '-dbcache=4096'
+      - '-par=0'
+      - '-maxconnections=1000'
+    ports:
+      - '33884:33884'
 
 volumes:
-  pool-data:
+  frontend-build:

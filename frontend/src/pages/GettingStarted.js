@@ -108,14 +108,67 @@ function GettingStarted() {
               <span className="gs-algo-badge">{parent.algorithm?.toUpperCase()}</span>
             </div>
 
+            {/* Stratum Ports Table */}
             <div className="gs-coin-info">
-              <div><span className="gs-info-label">Port:</span> <code style={{ fontSize: 16, fontWeight: 700, color: 'var(--accent)' }}>{parent.stratumPort}</code></div>
+              {parent.stratumPorts && parent.stratumPorts.length > 0 ? (
+                <div style={{ width: '100%' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                        <th style={{ textAlign: 'left', padding: '6px 12px', color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>Port</th>
+                        <th style={{ textAlign: 'left', padding: '6px 12px', color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>Difficulty</th>
+                        <th style={{ textAlign: 'left', padding: '6px 12px', color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>Type</th>
+                        <th style={{ textAlign: 'left', padding: '6px 12px', color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parent.stratumPorts.map(p => (
+                        <tr key={p.port} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '8px 12px' }}>
+                            <code style={{ fontSize: 16, fontWeight: 700, color: 'var(--accent)' }}>{p.port}</code>
+                          </td>
+                          <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600 }}>
+                            {p.diff?.toLocaleString()}
+                          </td>
+                          <td style={{ padding: '8px 12px' }}>
+                            {p.fixedDiff ? (
+                              <span style={{ padding: '2px 10px', borderRadius: 12, background: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6', fontSize: 12, fontWeight: 600 }}>Fixed</span>
+                            ) : (
+                              <span style={{ padding: '2px 10px', borderRadius: 12, background: 'rgba(76, 175, 80, 0.12)', color: '#4caf50', fontSize: 12, fontWeight: 600 }}>Vardiff</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>
+                            {p.label}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div>
+                  <span className="gs-info-label">Port:</span>{' '}
+                  <code style={{ fontSize: 16, fontWeight: 700, color: 'var(--accent)' }}>{parent.stratumPort}</code>
+                </div>
+              )}
             </div>
 
-            <div className="gs-code-block">
-              <div className="gs-code-label">Connect</div>
-              <code>{`-o stratum+tcp://${POOL_HOST}:${parent.stratumPort} -u YOUR_WALLET_ADDRESS.worker1 -p x`}</code>
-            </div>
+            {/* Connection examples for each port */}
+            {parent.stratumPorts && parent.stratumPorts.length > 0 ? (
+              parent.stratumPorts.map(p => (
+                <div className="gs-code-block" key={p.port} style={{ marginTop: 8 }}>
+                  <div className="gs-code-label">
+                    Port {p.port} — {p.fixedDiff ? 'Fixed' : 'Vardiff'} Diff {p.diff?.toLocaleString()}
+                  </div>
+                  <code>{`-o stratum+tcp://${POOL_HOST}:${p.port} -u YOUR_WALLET_ADDRESS.worker1 -p x`}</code>
+                </div>
+              ))
+            ) : (
+              <div className="gs-code-block">
+                <div className="gs-code-label">Connect</div>
+                <code>{`-o stratum+tcp://${POOL_HOST}:${parent.stratumPort} -u YOUR_WALLET_ADDRESS.worker1 -p x`}</code>
+              </div>
+            )}
 
             {isMergeParent && (
               <div style={{ marginTop: 16, padding: '12px 16px', background: 'rgba(var(--green-rgb, 76, 175, 80), 0.08)', borderRadius: 8, border: '1px solid rgba(var(--green-rgb, 76, 175, 80), 0.2)' }}>
@@ -178,6 +231,7 @@ function GettingStarted() {
           <div className="gs-api-endpoint">
             <code className="gs-api-method">GET</code>
             <code>/api/pool/info</code>
+
             <span>Pool overview and all coin stats</span>
           </div>
           <div className="gs-api-endpoint">

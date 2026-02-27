@@ -27,8 +27,8 @@ function Workers() {
   const totalHashrate = workers.filter(w => w.is_online).reduce((s, w) => s + w.hashrate, 0);
   const bestShare = Math.max(0, ...workers.map(w => w.best_share || 0));
 
-  // Time to find block calculation
-  const formatTime = (seconds) => {
+  // Time to find block calculation per coin
+  const formatTTF = (seconds) => {
     if (!seconds || !isFinite(seconds)) return 'N/A';
     if (seconds < 60) return `${Math.round(seconds)}s`;
     if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
@@ -37,19 +37,20 @@ function Workers() {
     return `${(seconds / (86400 * 365)).toFixed(1)}y`;
   };
 
-  const getCoinTimes = () => {
-    if (!poolInfo || !totalHashrate) return [];
-    const times = [];
-    for (const [id, info] of Object.entries(poolInfo.coins || {})) {
-      const netDiff = info.network?.difficulty;
-      if (!netDiff || !info.pool?.hashrate) continue;
-      const expectedSeconds = (netDiff * Math.pow(2, 32)) / totalHashrate;
-      times.push({ id, symbol: info.symbol, time: expectedSeconds });
-    }
-    return times.sort((a, b) => a.time - b.time);
+  const getTimeToBlockByCoin = (coinId) => {
+    if (!poolInfo) return 'N/A';
+    const coinWorkers = workers.filter(w => w.coin === coinId && w.is_online);
+    const coinHashrate = coinWorkers.reduce((s, w) => s + w.hashrate, 0);
+    if (!coinHashrate) return 'N/A';
+    const coinInfo = poolInfo.coins?.[coinId];
+    if (!coinInfo?.network?.difficulty) return 'N/A';
+    const netDiff = coinInfo.network.difficulty;
+    // TTF = netDiff * 2^32 / hashrate (same formula for all algorithms)
+    return formatTTF((netDiff * Math.pow(2, 32)) / coinHashrate);
   };
 
-  const coinTimes = getCoinTimes();
+  // Per-coin hashrates
+  const ltcHashrate = workers.filter(w => w.coin === 'litecoin' && w.is_online).reduce((s, w) => s + w.hashrate, 0);
 
   return (
     <div>
@@ -60,45 +61,19 @@ function Workers() {
 
       <div className="stats-grid">
         <div className="stat-card accent">
-          <div className="label">Total Hashrate</div>
-          <div className="value">{formatHashrate(totalHashrate)}</div>
-        </div>
-        <div className="stat-card green">
           <div className="label">Online Workers</div>
           <div className="value">{onlineCount}</div>
         </div>
+        {ltcHashrate > 0 && (
+          <div className="stat-card" style={{ borderLeft: '3px solid #bfbbbb' }}>
+            <div className="label">⛏️ Litecoin (Scrypt)</div>
+            <div className="value">{formatHashrate(ltcHashrate)}</div>
+            <div className="label" style={{ marginTop: 4 }}>TTF Block: <strong>{getTimeToBlockByCoin('litecoin')}</strong></div>
+          </div>
+        )}
         <div className="stat-card">
           <div className="label">Best Share</div>
           <div className="value">{formatNumber(bestShare, 0)}</div>
-        </div>
-        <div className="stat-card">
-          <div className="label">Est. Time to Block</div>
-          <div className="value">{coinTimes.length > 0 ? formatTime(coinTimes[0].time) : 'N/A'}</div>
-          {coinTimes.length > 0 && <div className="label" style={{ marginTop: 4, fontSize: '0.75rem' }}>({coinTimes[0].symbol})</div>}
-        </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <div className="card-header"><h2>Est. Time to Find Block</h2></div>
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Coin</th>
-                <th>Network Difficulty</th>
-                <th>Est. Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {coinTimes.map(ct => (
-                <tr key={ct.id}>
-                  <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{ct.symbol}</td>
-                  <td className="mono">{formatNumber(poolInfo.coins[ct.id].network.difficulty, 0)}</td>
-                  <td className="mono">{formatTime(ct.time)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       </div>
 

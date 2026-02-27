@@ -24,7 +24,7 @@ function CoinStats() {
     <div>
       <div className="page-header">
         <h1>{coinInfo.name} ({coinInfo.symbol})</h1>
-        <p>Algorithm: {coinInfo.algorithm.toUpperCase()} | Stratum Port: {coinInfo.stratumPort} | Block Reward: {coinInfo.reward} {coinInfo.symbol}</p>
+        <p>Algorithm: {coinInfo.algorithm.toUpperCase()} | Port: {coinInfo.stratumPort} | Block Reward: {coinInfo.reward} {coinInfo.symbol}</p>
       </div>
 
       <div className="stats-grid">
@@ -67,11 +67,56 @@ function CoinStats() {
         <div className="card-header">
           <h2>Connection Details</h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <div>
+
+        {/* Stratum Ports Table */}
+        {coinInfo.stratumPorts && coinInfo.stratumPorts.length > 0 ? (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>STRATUM PORTS</div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  <th style={{ textAlign: 'left', padding: '6px 12px', color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase' }}>Port</th>
+                  <th style={{ textAlign: 'left', padding: '6px 12px', color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase' }}>Stratum URL</th>
+                  <th style={{ textAlign: 'left', padding: '6px 12px', color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase' }}>Difficulty</th>
+                  <th style={{ textAlign: 'left', padding: '6px 12px', color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase' }}>Type</th>
+                  <th style={{ textAlign: 'left', padding: '6px 12px', color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase' }}>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {coinInfo.stratumPorts.map(p => (
+                  <tr key={p.port} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '8px 12px' }}>
+                      <code style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>{p.port}</code>
+                    </td>
+                    <td style={{ padding: '8px 12px' }}>
+                      <code style={{ color: 'var(--accent)', fontSize: 13 }}>stratum+tcp://{window.location.hostname}:{p.port}</code>
+                    </td>
+                    <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 600 }}>
+                      {p.diff?.toLocaleString()}
+                    </td>
+                    <td style={{ padding: '8px 12px' }}>
+                      {p.fixedDiff ? (
+                        <span style={{ padding: '2px 10px', borderRadius: 12, background: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6', fontSize: 12, fontWeight: 600 }}>Fixed</span>
+                      ) : (
+                        <span style={{ padding: '2px 10px', borderRadius: 12, background: 'rgba(76, 175, 80, 0.12)', color: '#4caf50', fontSize: 12, fontWeight: 600 }}>Vardiff</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '8px 12px', color: 'var(--text-secondary)', fontSize: 13 }}>
+                      {p.label}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>STRATUM URL</div>
             <code style={{ color: 'var(--accent)', fontSize: 14 }}>stratum+tcp://{window.location.hostname}:{coinInfo.stratumPort}</code>
           </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>WORKER FORMAT</div>
             <code style={{ color: 'var(--accent)', fontSize: 14 }}>username.workerName</code>
@@ -91,6 +136,7 @@ function CoinStats() {
       {topMiners && topMiners.length > 0 && (
         <div className="card" style={{ marginBottom: 24 }}>
           <div className="card-header">
+
             <h2>Top Miners</h2>
           </div>
           <div className="table-container">

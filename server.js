@@ -1014,8 +1014,7 @@ class StratumServer extends EventEmitter {
       const hashBig = BigInt('0x' + hashReversed.toString('hex'));
       // Use algorithm-appropriate max target for shareDiff
       
-      const shareDiffMax = job.algorithm === "scrypt" ? MAX_TARGET_SCRYPT : MAX_TARGET_SHA256;
-      const shareDiff = hashBig > 0n ? Number(shareDiffMax / hashBig) : 0;
+      const shareDiff = hashBig > 0n ? Number(MAX_TARGET_SHA256 / hashBig) : 0;
 
       const shareTarget = difficultyToTarget(client.difficulty, job.algorithm);
       const meetsShareTarget = hashMeetsTarget(hashReversed, shareTarget);

@@ -62,7 +62,25 @@ function PoolStats() {
                   <div className="coin-symbol">{coin.symbol}</div>
                   <div>
                     <div className="coin-name">{coin.name}</div>
-                    <div className="coin-algo">Port: {coin.stratumPort}</div>
+                    <div className="coin-algo">
+                      {coin.stratumPorts && coin.stratumPorts.length > 0 ? (
+                        <span>
+                          {coin.stratumPorts.map((p, i) => (
+                            <span key={p.port}>
+                              {i > 0 && ' · '}
+                              Port {p.port}
+                              {p.fixedDiff ? (
+                                <span style={{ marginLeft: 4, padding: '1px 6px', borderRadius: 8, background: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6', fontSize: 10, fontWeight: 600 }}>Fixed</span>
+                              ) : (
+                                <span style={{ marginLeft: 4, padding: '1px 6px', borderRadius: 8, background: 'rgba(76, 175, 80, 0.12)', color: '#4caf50', fontSize: 10, fontWeight: 600 }}>Vardiff</span>
+                              )}
+                            </span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span>Port: {coin.stratumPort}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="coin-stats">
