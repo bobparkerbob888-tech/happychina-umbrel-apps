@@ -1,19 +1,22 @@
 /**
- * Coin configurations.
+ * Coin configurations - Multi-Algorithm Pool (SHA-256 + Scrypt)
  * Each coin specifies its algorithm, daemon RPC settings, stratum port, and reward info.
  * Daemon credentials are loaded from environment variables (.env file).
- * To add a coin: copy an existing entry, set the env var prefix (e.g., MYCOIN_RPC_*), and add to .env
- * To remove a coin: delete or comment out its entry below and from .env
  */
 const coins = {
   litecoin: {
     name: 'Litecoin',
     symbol: 'LTC',
     algorithm: 'scrypt',
-    stratumPort: 3334,
+    stratumPort: 3333,
+    // Multiple difficulty ports - vardiff ramps up from starting diff
+    stratumPorts: [
+      { port: 3333, diff: 1048576, fixedDiff: true, label: 'Fixed Diff 1M (ASIC miners)' },
+      { port: 3344, diff: 8,    label: 'Low Diff (CPU/GPU miners)' }
+    ],
     reward: 6.25,
     blockTime: 150,
-    confirmations: 60,
+    confirmations: 2,
     segwit: true,
     mweb: true,
     daemon: {
@@ -29,10 +32,10 @@ const coins = {
     name: 'Dogecoin',
     symbol: 'DOGE',
     algorithm: 'scrypt',
-    stratumPort: 3335,
+    stratumPort: 3334,
     reward: 10000,
     blockTime: 60,
-    confirmations: 40,
+    confirmations: 2,
     mergeMinedWith: 'litecoin',
     chainId: 98,
     auxpowApi: 'getauxblock',
@@ -49,10 +52,10 @@ const coins = {
     name: 'Pepecoin',
     symbol: 'PEPE',
     algorithm: 'scrypt',
-    stratumPort: 3337,
-    reward: 0, // varies
+    stratumPort: 3335,
+    reward: 0,
     blockTime: 60,
-    confirmations: 100,
+    confirmations: 2,
     mergeMinedWith: 'litecoin',
     chainId: 63,
     auxpowApi: 'createauxblock',
@@ -69,10 +72,10 @@ const coins = {
     name: 'Bells',
     symbol: 'BELLS',
     algorithm: 'scrypt',
-    stratumPort: 3338,
-    reward: 0, // varies
+    stratumPort: 3336,
+    reward: 0,
     blockTime: 60,
-    confirmations: 100,
+    confirmations: 2,
     segwit: true,
     mergeMinedWith: 'litecoin',
     chainId: 16,
@@ -90,12 +93,12 @@ const coins = {
     name: 'Luckycoin',
     symbol: 'LKY',
     algorithm: 'scrypt',
-    stratumPort: 3339,
-    reward: 0, // varies
+    stratumPort: 3337,
+    reward: 0,
     blockTime: 60,
-    confirmations: 100,
+    confirmations: 2,
     mergeMinedWith: 'litecoin',
-    chainId: 0, // detected at runtime via createauxblock
+    chainId: 777,
     auxpowApi: 'createauxblock',
     daemon: {
       host: process.env.LKY_RPC_HOST || '127.0.0.1',
@@ -110,14 +113,14 @@ const coins = {
     name: 'Junkcoin',
     symbol: 'JKC',
     algorithm: 'scrypt',
-    stratumPort: 3340,
-    reward: 0, // varies
+    stratumPort: 3338,
+    reward: 0,
     blockTime: 60,
-    confirmations: 100,
+    confirmations: 2,
     mergeMinedWith: 'litecoin',
     chainId: 8224,
     auxpowApi: 'createauxblock',
-    payoutAddress: process.env.JKC_PAYOUT_ADDRESS || '', // Required: JKC daemon can't generate addresses
+    payoutAddress: process.env.JKC_PAYOUT_ADDRESS || '',
     daemon: {
       host: process.env.JKC_RPC_HOST || '127.0.0.1',
       port: parseInt(process.env.JKC_RPC_PORT) || 9772,
@@ -131,13 +134,13 @@ const coins = {
     name: 'Dingocoin',
     symbol: 'DINGO',
     algorithm: 'scrypt',
-    stratumPort: 3341,
-    reward: 0, // varies
+    stratumPort: 3339,
+    reward: 0,
     blockTime: 60,
-    confirmations: 40,
+    confirmations: 2,
     mergeMinedWith: 'litecoin',
     chainId: 50,
-    auxpowApi: 'getauxblock',
+    auxpowApi: 'createauxblock',
     daemon: {
       host: process.env.DINGO_RPC_HOST || '127.0.0.1',
       port: parseInt(process.env.DINGO_RPC_PORT) || 34646,
@@ -151,10 +154,10 @@ const coins = {
     name: 'Shibacoin',
     symbol: 'SHIC',
     algorithm: 'scrypt',
-    stratumPort: 3342,
-    reward: 0, // varies
+    stratumPort: 3340,
+    reward: 0,
     blockTime: 60,
-    confirmations: 40,
+    confirmations: 2,
     mergeMinedWith: 'litecoin',
     chainId: 74,
     auxpowApi: 'createauxblock',
@@ -171,10 +174,10 @@ const coins = {
     name: 'TrumPOW',
     symbol: 'TRMP',
     algorithm: 'scrypt',
-    stratumPort: 3343,
-    reward: 0, // varies
+    stratumPort: 3341,
+    reward: 0,
     blockTime: 60,
-    confirmations: 40,
+    confirmations: 2,
     mergeMinedWith: 'litecoin',
     chainId: 168,
     auxpowApi: 'createauxblock',

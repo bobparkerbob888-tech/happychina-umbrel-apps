@@ -57,6 +57,9 @@ services:
       - ./paymentProcessor.js:/app/src/services/paymentProcessor.js:ro
       - ./index.js:/app/src/index.js:ro
       - ./utcTimestamps.js:/app/src/middleware/utcTimestamps.js:ro
+      - ./admin.js:/app/src/api/routes/admin.js:ro
+      - ./dockerControl.js:/app/src/services/dockerControl.js:ro
+      - ./auxpow.js:/app/src/stratum/auxpow.js:ro
     ports:
       - '8080:8080'
       - '3332-3344:3332-3344'
@@ -134,11 +137,6 @@ services:
       - '-dbcache=4096'
       - '-maxconnections=1000'
       - '-par=4'
-      - '-addnode=65.108.79.95:22556'
-      - '-addnode=188.40.103.122:22556'
-      - '-addnode=23.88.18.235:22556'
-      - '-addnode=5.9.68.211:22556'
-      - '-addnode=157.173.198.7:22556'
     ports:
       - '22556:22556'
 
