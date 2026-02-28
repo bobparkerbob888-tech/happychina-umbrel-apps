@@ -26,10 +26,6 @@ services:
       BELLS_RPC_PORT: '19918'
       BELLS_RPC_USER: rpcuser
       BELLS_RPC_PASS: rpcpass
-      LKY_RPC_HOST: luckycoind
-      LKY_RPC_PORT: '9918'
-      LKY_RPC_USER: rpcuser
-      LKY_RPC_PASS: rpcpass
       JKC_RPC_HOST: junkcoind
       JKC_RPC_PORT: '9772'
       JKC_RPC_USER: rpcuser
@@ -182,29 +178,6 @@ services:
       - '-par=4'
     ports:
       - '19919:19919'
-
-  luckycoind:
-    image: btccom/luckycoin:4.0.1
-    restart: unless-stopped
-    stop_grace_period: 15m
-    volumes:
-      - ./data/luckycoin:/root/.luckycoin
-    command:
-      - /bin/luckycoind
-      - '-server=1'
-      - '-rpcuser=rpcuser'
-      - '-rpcpassword=rpcpass'
-      - '-rpcallowip=0.0.0.0/0'
-      - '-rpcbind=0.0.0.0'
-      - '-rpcport=9918'
-      - '-port=9917'
-      - '-printtoconsole'
-      - '-maxtipage=63072000'
-      - '-dbcache=3072'
-      - '-maxconnections=1000'
-      - '-par=4'
-    ports:
-      - '9917:9917'
 
   junkcoind:
     image: btccom/junkcoin:latest
