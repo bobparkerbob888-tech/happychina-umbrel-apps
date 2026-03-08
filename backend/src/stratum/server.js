@@ -361,7 +361,7 @@ class StratumServer extends EventEmitter {
       if (info && info.scriptPubKey) return Buffer.from(info.scriptPubKey, 'hex');
     } catch (e) {}
     try {
-      const info = await daemon.callWallet('getaddressinfo', [address]);
+      const info = await daemon.call('getaddressinfo', [address]);
       if (info && info.scriptPubKey) return Buffer.from(info.scriptPubKey, 'hex');
     } catch (e) {}
     // Manual bech32 P2WPKH decode as last resort
@@ -381,8 +381,8 @@ class StratumServer extends EventEmitter {
       // Try to load/create wallet and get address
       try { await daemon.ensureWalletLoaded(); } catch (e) {}
       let address;
-      try { address = await daemon.callWallet('getnewaddress', ['pool']); } catch (e) {
-        try { address = await daemon.callWallet('getnewaddress', ['pool']); } catch (e2) {}
+      try { address = await daemon.getNewAddress(); } catch (e) {
+        try { address = await daemon.call('getnewaddress', ['pool']); } catch (e2) {}
       }
       if (address) {
         const spk = await this.getScriptPubKey(daemon, address);
@@ -398,7 +398,7 @@ class StratumServer extends EventEmitter {
     }
   }
 
-  start() {
+  async start() {
     // Initialize merge mining groups
     this.initMergeMining();
 
@@ -407,9 +407,10 @@ class StratumServer extends EventEmitter {
       // Only start standalone stratum servers for parent chains and non-merged coins
       if (!coin.mergeMinedWith) {
         this.startCoinServer(coinId, coin);
+        // Initialize pool address BEFORE starting template polling
+        // so first coinbase uses the real pool address, not OP_TRUE
+        await this.initPoolAddress(coinId).catch(e => console.error(`[Pool] initPoolAddress ${coinId}:`, e.message));
         this.startTemplatePolling(coinId, coin);
-        // Initialize pool address for coinbase output (async, retries in background)
-        this.initPoolAddress(coinId).catch(e => console.error(`[Pool] initPoolAddress ${coinId}:`, e.message));
       }
     }
     console.log('[Stratum] All coin servers started');
@@ -476,12 +477,7 @@ class StratumServer extends EventEmitter {
         const template = await daemon.getBlockTemplate(rules);
 
         // Attach pool scriptPubKey to template for coinbase output
-        let poolSpk = this.poolScriptPubKeys.get(coinId);
-        if (!poolSpk) {
-          // Retry initPoolAddress if not yet set (daemon may have been starting)
-          await this.initPoolAddress(coinId).catch(() => {});
-          poolSpk = this.poolScriptPubKeys.get(coinId);
-        }
+        const poolSpk = this.poolScriptPubKeys.get(coinId);
         if (poolSpk) {
           template._poolScriptPubKey = poolSpk;
         }
@@ -491,14 +487,26 @@ class StratumServer extends EventEmitter {
 
         this.templates.set(coinId, template);
 
-        // Refresh aux blocks for merge mining if this is a parent chain
-        if (this.mergeGroups.has(coinId)) {
-          await this.refreshAuxBlocks(coinId);
-        }
-
         if (isNew) {
           console.log(`[Stratum] New block template for ${coin.name}: height=${template.height} txs=${template.transactions.length}`);
+          // Refresh aux blocks on new parent block
+          if (this.mergeGroups.has(coinId)) {
+            await this.refreshAuxBlocks(coinId);
+          }
           this.broadcastJob(coinId, true);
+        } else if (this.mergeGroups.has(coinId)) {
+          // Refresh aux blocks every poll (5s) even without new parent block
+          // Aux chains have shorter block times and go stale quickly
+          const auxChanged = await this.refreshAuxBlocks(coinId);
+          if (auxChanged) {
+            // Aux blocks changed — broadcast new jobs so miners get fresh commitments
+            if (!this._auxChangeLogCount) this._auxChangeLogCount = 0;
+            this._auxChangeLogCount++;
+            if (this._auxChangeLogCount <= 5 || this._auxChangeLogCount % 50 === 0) {
+              console.log(`[MergeMining] Aux blocks changed (#${this._auxChangeLogCount}), broadcasting new jobs`);
+            }
+            this.broadcastJob(coinId, false); // cleanJobs=false to not disrupt active work
+          }
         }
       } catch (err) {
         if (!err.message.includes('ECONNREFUSED')) {
@@ -547,6 +555,7 @@ class StratumServer extends EventEmitter {
   }
 
   // Fetch/refresh aux blocks from all merge-mined children of a parent chain
+  // Returns true if any aux block hashes changed (need new jobs)
   async refreshAuxBlocks(parentCoinId) {
     const children = this.mergeGroups.get(parentCoinId);
     if (!children || children.size === 0) return;
@@ -577,45 +586,11 @@ class StratumServer extends EventEmitter {
                   auxBlock = await child.daemon.getAuxBlock();
                   child.coin.auxpowApi = 'getauxblock';
                 } catch (e2) {
-                  // Auto-generate an address using Node.js crypto (secp256k1)
-                  try {
-                    const crypto = require('crypto');
-                    const ecdh = crypto.createECDH('secp256k1');
-                    ecdh.generateKeys();
-                    const pubKeyBuf = Buffer.from(ecdh.getPublicKey('hex', 'compressed'), 'hex');
-                    const privKeyHex = ecdh.getPrivateKey('hex');
-                    // SHA256 + RIPEMD160 of public key
-                    const sha256 = crypto.createHash('sha256').update(pubKeyBuf).digest();
-                    const ripemd160 = crypto.createHash('ripemd160').update(sha256).digest();
-                    // Version byte from coin config addressPrefixes
-                    // JKC mainnet = 16, regtest = 47
-                    const versionByte = child.coin.symbol === 'JKC' ? 16 : 0;
-                    const payload = Buffer.concat([Buffer.from([versionByte]), ripemd160]);
-                    const checksum = crypto.createHash('sha256').update(
-                      crypto.createHash('sha256').update(payload).digest()
-                    ).digest().slice(0, 4);
-                    const fullPayload = Buffer.concat([payload, checksum]);
-                    // Base58 encode
-                    const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-                    let num = BigInt('0x' + fullPayload.toString('hex'));
-                    let result = '';
-                    while (num > 0n) { const r = num % 58n; num = num / 58n; result = ALPHABET[Number(r)] + result; }
-                    for (const b of fullPayload) { if (b === 0) result = '1' + result; else break; }
-                    child.address = result;
-                    // Save private key so operator can import it later
-                    const fs = require('fs');
-                    const keyFile = '/app/data/jkc_generated_key.json';
-                    const keyData = { address: result, privateKeyHex: privKeyHex, generated: new Date().toISOString(),
-                      note: 'Import into JKC wallet with: junkcoin-cli importprivkey <WIF>' };
-                    fs.writeFileSync(keyFile, JSON.stringify(keyData, null, 2));
-                    console.log(`[MergeMining] Auto-generated ${child.coin.symbol} payout address: ${result} (key saved to ${keyFile})`);
-                  } catch (genErr) {
-                    if (!child._addressWarnShown) {
-                      console.error(`[MergeMining] Cannot get address for ${child.coin.symbol}: ${e.message}. Set ${child.coin.symbol}_PAYOUT_ADDRESS in .env`);
-                      child._addressWarnShown = true;
-                    }
-                    continue;
+                  if (!child._addressWarnShown) {
+                    console.error(`[MergeMining] Cannot get address for ${child.coin.symbol}: ${e.message}. Set ${child.coin.symbol}_PAYOUT_ADDRESS in .env`);
+                    child._addressWarnShown = true;
                   }
+                  continue;
                 }
               }
             }
@@ -642,7 +617,25 @@ class StratumServer extends EventEmitter {
       }
     }
 
-    if (activeAuxBlocks.size === 0) return;
+    if (activeAuxBlocks.size === 0) return false;
+
+    // Detect if any aux block hashes changed since last refresh
+    let auxChanged = false;
+    if (!this._prevAuxHashes) this._prevAuxHashes = new Map();
+    const prevHashes = this._prevAuxHashes.get(parentCoinId) || new Map();
+    const newHashes = new Map();
+    for (const [childId, auxBlock] of activeAuxBlocks) {
+      newHashes.set(childId, auxBlock.hash);
+      if (prevHashes.get(childId) !== auxBlock.hash) {
+        auxChanged = true;
+        if (!this._auxDbgCount) this._auxDbgCount = 0;
+        this._auxDbgCount++;
+        if (this._auxDbgCount <= 5) {
+          console.log(`[MergeMining] ${coins[childId]?.symbol} aux hash changed: ${(prevHashes.get(childId)||'none').substring(0,16)}... -> ${auxBlock.hash.substring(0,16)}...`);
+        }
+      }
+    }
+    this._prevAuxHashes.set(parentCoinId, newHashes);
 
     // Compute tree params and build aux merkle tree
     try {
@@ -664,6 +657,7 @@ class StratumServer extends EventEmitter {
     } catch (err) {
       console.error(`[MergeMining] Tree build error for ${coins[parentCoinId].symbol}:`, err.message);
     }
+    return auxChanged;
   }
 
   handleConnection(socket, coinId, coin, portDifficulty, fixedDiff) {
@@ -1021,8 +1015,6 @@ class StratumServer extends EventEmitter {
         versionHex = versionInt.toString(16).padStart(8, '0');
       }
 
-      const maxTarget = job.algorithm === 'scrypt' ? MAX_TARGET_SCRYPT : MAX_TARGET_SHA256;
-
       // Build header using Yiimp's method (hex string → ser_string_be → binlify)
       // This produces wire format and matches what cgminer/ASIC miners compute
       const header = buildHeaderYiimp(versionHex, job.prevHashStratum, merkleRoot, nTime, job.nbits, nonce);
@@ -1032,26 +1024,12 @@ class StratumServer extends EventEmitter {
         hashBuffer = sha256d(header);
       } else if (job.algorithm === 'scrypt') {
         hashBuffer = scryptHash(header);
-
-        // Diagnostic for first 2 scrypt shares
-        if (!this._diagCount) this._diagCount = 0;
-        if (this._diagCount < 2) {
-          this._diagCount++;
-          const scRev = Buffer.from(hashBuffer).reverse().toString('hex');
-          const diagBig = BigInt('0x' + scRev);
-          const diagDiff = diagBig > 0n ? Number(maxTarget / diagBig) : 0;
-          console.log(`[DIAG] Share #${this._diagCount}: jobId=${job.id} en1=${client.extraNonce1} en2=${extraNonce2} nTime=${nTime} nonce=${nonce}`);
-          console.log(`[DIAG] prevHash=${job.prevHash} prevHashStratum=${job.prevHashStratum}`);
-          console.log(`[DIAG] header=${header.toString('hex')}`);
-          console.log(`[DIAG] scryptHash=${scRev} shareDiff=${diagDiff.toFixed(4)}`);
-        }
       } else {
         return { valid: false, reason: 'Unsupported algorithm' };
       }
 
       const hashReversed = Buffer.from(hashBuffer).reverse();
       const hashBig = BigInt('0x' + hashReversed.toString('hex'));
-      // Use algorithm-appropriate max target for shareDiff
       const shareDiff = hashBig > 0n ? Number(MAX_TARGET_SHA256 / hashBig) : 0;
 
       const shareTarget = difficultyToTarget(client.difficulty, job.algorithm);
@@ -1063,10 +1041,6 @@ class StratumServer extends EventEmitter {
 
       const networkTarget = nbitsToTarget(job.nbits);
       const isBlock = hashMeetsTarget(hashReversed, networkTarget);
-      if (shareDiff > 10000000) {
-        const nTargetHex = networkTarget.toString("hex");
-        const hashHex = hashReversed.toString("hex");
-      }
 
       return { valid: true, shareDiff, isBlock, hash: hashReversed.toString('hex') };
     } catch (err) {
@@ -1095,16 +1069,22 @@ class StratumServer extends EventEmitter {
 
         // Get the actual reward from template
         const reward = template.coinbasevalue / 1e8;
+        // Get the actual SHA256d block hash from daemon (scrypt hash is for PoW only)
+        let realBlockHash = blockHash;
+        try {
+          const daemonHash = await daemon.call('getblockhash', [template.height]);
+          if (daemonHash) realBlockHash = daemonHash;
+        } catch (e) { console.log(`[Stratum] Could not get real block hash: ${e.message}`); }
 
         const dbResult = db.prepare(
           'INSERT INTO blocks (coin, height, hash, reward, difficulty, finder_id, worker_name, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(client.coin, template.height, blockHash, reward, template.difficulty || 0, client.userId, client.workerName, 'pending');
+        ).run(client.coin, template.height, realBlockHash, reward, template.difficulty || 0, client.userId, client.workerName, 'pending');
 
         this.emit('block', {
           id: dbResult.lastInsertRowid,
           coin: client.coin,
           height: template.height,
-          hash: blockHash,
+          hash: realBlockHash,
           finder: client.userId,
           worker: client.workerName
         });
@@ -1146,11 +1126,21 @@ class StratumServer extends EventEmitter {
     const txCount = 1 + template.transactions.length;
     parts.push(writeVarInt(txCount));
 
-    // Full coinbase transaction (with witness data for segwit)
+    // Full coinbase transaction for block submission
+    // For segwit: inject witness marker/flag and witness data into the stratum coinbase
+    // This guarantees the txid matches (same non-witness bytes = same txid)
     if (coin.segwit) {
-      const mergeCommit = job.auxData ? job.auxData.commitment : null;
-      const coinbaseTx = buildCoinbaseTx(template, blockEN1, extraNonce2, client.coin, mergeCommit);
-      parts.push(coinbaseTx);
+      // coinbaseBuffer is the non-witness serialization: version(4) + inputs + outputs + locktime(4)
+      // We need: version(4) + marker(0x00) + flag(0x01) + inputs + outputs + witness + locktime(4)
+      const witnessCoinbase = Buffer.concat([
+        coinbaseBuffer.slice(0, 4),                // version
+        Buffer.from([0x00, 0x01]),                  // segwit marker + flag
+        coinbaseBuffer.slice(4, coinbaseBuffer.length - 4), // inputs + outputs (everything between version and locktime)
+        Buffer.from([0x01, 0x20]),                  // witness: 1 stack item, 32 bytes
+        Buffer.alloc(32, 0),                        // witness reserved value (32 zero bytes)
+        coinbaseBuffer.slice(coinbaseBuffer.length - 4)  // locktime
+      ]);
+      parts.push(witnessCoinbase);
     } else {
       parts.push(coinbaseBuffer);
     }
@@ -1221,32 +1211,12 @@ class StratumServer extends EventEmitter {
     const { coinbase1, coinbase2 } = splitCoinbaseTx(template, client.coin, mergeCommitment);
 
     // Compute merkle branches from template transactions
+    // IMPORTANT: Must use txid (non-witness hash), NOT hash (wtxid/witness hash)
+    // The block header merkle root is always computed from txids per BIP141
     const merkleBranches = [];
     if (template.transactions && template.transactions.length > 0) {
-      // Build list of transaction hashes
       const txHashes = template.transactions.map(tx => tx.txid || tx.hash);
-      // Compute merkle branches (we only need branches, not full tree)
-      let hashes = [...txHashes];
-      while (hashes.length > 0) {
-        merkleBranches.push(hashes[0]);
-        if (hashes.length === 1) break;
-        // Pair up and hash
-        const newHashes = [];
-        for (let i = 0; i < hashes.length; i += 2) {
-          const left = hashes[i];
-          const right = i + 1 < hashes.length ? hashes[i + 1] : hashes[i];
-          const combined = Buffer.concat([
-            Buffer.from(left, 'hex'),
-            Buffer.from(right, 'hex')
-          ]);
-          newHashes.push(sha256d(combined).toString('hex'));
-        }
-        hashes = newHashes;
-      }
-      // Actually, the merkle branches for stratum are just the sibling hashes
-      // Let me recalculate properly
-      merkleBranches.length = 0;
-      this.computeMerkleBranches(template.transactions.map(tx => tx.hash || tx.txid), merkleBranches);
+      this.computeMerkleBranches(txHashes, merkleBranches);
     }
 
     // prevhash: Yiimp ser_string_be2 format (reverse order of 4-byte groups)
@@ -1312,14 +1282,21 @@ class StratumServer extends EventEmitter {
   }
 
   // Compute merkle branches for stratum (sibling hashes needed to reconstruct merkle root)
+  // The coinbase tx is at index 0 (not in txHashes). txHashes are the OTHER transactions.
+  // At each level, the first element is the sibling of the coinbase path.
   computeMerkleBranches(txHashes, branches) {
     if (txHashes.length === 0) return;
 
-    let level = txHashes.map(h => h);
-    while (level.length > 1) {
+    let level = txHashes.slice();
+
+    while (level.length > 0) {
+      // The first element at this level is the sibling hash for the coinbase path
       branches.push(level[0]);
-      level.shift();
-      // Hash pairs at this level
+      level = level.slice(1);
+
+      if (level.length === 0) break;
+
+      // Hash remaining elements in pairs for the next level
       const nextLevel = [];
       for (let i = 0; i < level.length; i += 2) {
         const left = level[i];
@@ -1330,9 +1307,6 @@ class StratumServer extends EventEmitter {
         ])).toString('hex'));
       }
       level = nextLevel;
-    }
-    if (level.length === 1 && txHashes.length > 1) {
-      branches.push(level[0]);
     }
   }
 
@@ -1514,6 +1488,14 @@ class StratumServer extends EventEmitter {
       );
       const proofHex = proof.toString('hex');
 
+      // Check if aux block is still current (not stale)
+      const currentAuxData = this.auxMerkleData.get(client.coin);
+      const currentAuxBlock = currentAuxData?.auxBlocks?.get(auxCoinId);
+      if (currentAuxBlock && currentAuxBlock.hash !== auxBlock.hash) {
+        console.log(`[MergeMining] Aux block stale for ${auxCoin.symbol}: job has ${auxBlock.hash.substring(0,16)}... current is ${currentAuxBlock.hash.substring(0,16)}...`);
+        // Still try to submit — daemon may still accept it if within tracking window
+      }
+
       // Submit to aux chain daemon
       let submitResult;
       if (auxCoin.auxpowApi === 'getauxblock') {
@@ -1522,7 +1504,7 @@ class StratumServer extends EventEmitter {
         submitResult = await child.daemon.submitAuxBlock(auxBlock.hash, proofHex);
       }
 
-      if (submitResult === true || submitResult === null || submitResult === undefined || submitResult === '' || false) {
+      if (submitResult === true || submitResult === null || submitResult === undefined || submitResult === '') {
         console.log(`[MergeMining] Aux block ACCEPTED by ${auxCoin.symbol} daemon! height=${auxBlock.height}`);
 
         // Record the block in the database

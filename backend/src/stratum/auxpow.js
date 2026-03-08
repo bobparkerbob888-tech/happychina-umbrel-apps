@@ -181,9 +181,11 @@ function buildAuxMerkleTree(auxBlocks, treeParams) {
 function buildMergeCommitment(auxMerkleRoot, treeSize, nonce) {
   const buf = Buffer.alloc(44);
   MERGE_MINING_MAGIC.copy(buf, 0);       // 4 bytes magic
-  // Daemon reverses computed root before searching coinbase, so store in big-endian
-  const reversedRoot = Buffer.from(auxMerkleRoot).reverse();
-  reversedRoot.copy(buf, 4);             // 32 bytes merkle root
+  // Store root in BIG-ENDIAN (display) byte order in the commitment.
+  // Daemon computes expected root in LE (internal), reverses to BE, then
+  // searches for those BE bytes in the coinbase scriptSig.
+  const rootBE = Buffer.from(auxMerkleRoot).reverse();
+  rootBE.copy(buf, 4);                   // 32 bytes merkle root (BE)
   buf.writeUInt32LE(treeSize, 36);        // 4 bytes tree size
   buf.writeUInt32LE(nonce, 40);           // 4 bytes nonce
   return buf;

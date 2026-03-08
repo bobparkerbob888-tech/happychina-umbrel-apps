@@ -44,9 +44,24 @@ class PaymentProcessor {
 
     if (balances.length === 0) return;
 
-    console.log(`[Payment] Processing ${balances.length} ${coin.symbol} payments`);
-
     const daemon = new DaemonRPC(coin.daemon);
+
+    // Check daemon wallet has spendable balance before attempting sends
+    try {
+      const walletBal = await daemon.getBalance();
+      if (walletBal <= 0) {
+        // Check if there's immature balance waiting
+        try {
+          const winfo = await daemon.call('getwalletinfo');
+          if (winfo.immature_balance > 0) {
+            console.log(`[Payment] ${coin.symbol}: ${winfo.immature_balance} immature, waiting for maturity`);
+          }
+        } catch {}
+        return;
+      }
+    } catch {}
+
+    console.log(`[Payment] Processing ${balances.length} ${coin.symbol} payments`);
 
     for (const balance of balances) {
       try {

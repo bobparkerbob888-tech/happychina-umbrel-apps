@@ -186,6 +186,7 @@ class BlockMonitor {
         // Block might not be found - could be orphaned
       }
     }
+
   }
 
   getDaemonStatus() {

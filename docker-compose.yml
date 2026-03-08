@@ -1,268 +1,146 @@
 services:
-  # === Backend API (Node.js + SQLite) ===
+  app_proxy:
+    image: getumbrel/app-proxy:1.0.0
+    restart: unless-stopped
+    environment:
+      APP_HOST: frontend
+      APP_PORT: '80'
+      PROXY_AUTH_ADD: 'false'
+      UMBREL_AUTH_SECRET: DEADBEEF
+      MANAGER_IP: 10.21.21.4
+      MANAGER_PORT: '3006'
+      AUTH_SERVICE_PORT: '2000'
+      PROXY_PORT: '3000'
+      LOG_LEVEL: info
+    volumes:
+      - ${APP_DATA_DIR:-.}/umbrel-app.yml:/extra/umbrel-app.yml:ro
+    ports:
+      - '3000:3000'
+    networks:
+      - default
+      - umbrel_main_network
+    container_name: happychina-pool_app_proxy_1
   backend:
     image: ghcr.io/bobparkerbob888-tech/happychina-pool-backend:2.1.0
     restart: unless-stopped
     environment:
       PORT: '8080'
-      HOST: '0.0.0.0'
-      JWT_SECRET: 'change-this-to-a-random-secret-string'
-      POOL_NAME: 'HappyChina Pool'
+      HOST: 0.0.0.0
+      JWT_SECRET: 2f82d4c6cd23dd16b31dca1b802c4cf569a419a84442e323160294dfca63f856
+      POOL_NAME: HappyChina Pool
       POOL_FEE: '1.0'
       DB_PATH: /app/data/pool.db
+      DOCKER_PROJECT: happychina-pool
       LTC_RPC_HOST: litecoind
       LTC_RPC_PORT: '9332'
-      LTC_RPC_USER: rpcuser
-      LTC_RPC_PASS: rpcpass
+      LTC_RPC_USER: umbrel
+      LTC_RPC_PASS: umbrel
       DOGE_RPC_HOST: dogecoind
       DOGE_RPC_PORT: '22555'
-      DOGE_RPC_USER: rpcuser
-      DOGE_RPC_PASS: rpcpass
+      DOGE_RPC_USER: umbrel
+      DOGE_RPC_PASS: umbrel
       PEPE_RPC_HOST: pepecoind
       PEPE_RPC_PORT: '29373'
-      PEPE_RPC_USER: rpcuser
-      PEPE_RPC_PASS: rpcpass
+      PEPE_RPC_USER: umbrel
+      PEPE_RPC_PASS: umbrel
       BELLS_RPC_HOST: bellsd
       BELLS_RPC_PORT: '19918'
-      BELLS_RPC_USER: rpcuser
-      BELLS_RPC_PASS: rpcpass
+      BELLS_RPC_USER: umbrel
+      BELLS_RPC_PASS: umbrel
+      LKY_RPC_HOST: luckycoind
+      LKY_RPC_PORT: '9918'
+      LKY_RPC_USER: umbrel
+      LKY_RPC_PASS: umbrel
       JKC_RPC_HOST: junkcoind
       JKC_RPC_PORT: '9772'
-      JKC_RPC_USER: rpcuser
-      JKC_RPC_PASS: rpcpass
+      JKC_RPC_USER: umbrel
+      JKC_RPC_PASS: umbrel
+      JKC_PAYOUT_ADDRESS: 7ZcDG1N1X6TbiFmzNLxtBXvMd1Gm7sC14d
+      DOGE_PAYOUT_ADDRESS: DCXbWCBFN7EAbq5TiwFEMuwKEjj6BJ4iJk
+      PEPE_PAYOUT_ADDRESS: PgvBDq9wzhJ9LbiDjkcB2dd4CE1ZdUQ5eP
+      BELLS_PAYOUT_ADDRESS: bel1qxv7n4qg35h9aym5428dfl55l0hfzah6zfssf5j
+      LKY_PAYOUT_ADDRESS: LBj2CvErPdtaju6HpFMVvrpSevQSSK7YSV
+      DINGO_PAYOUT_ADDRESS: DKugtL2RgJhH5o66FRQyFmPLAC4ug2dW6a
+      SHIC_PAYOUT_ADDRESS: Sdavo8kQe9bWVnWmjc6ev1fu6gZmbpwpd6
+      TRMP_PAYOUT_ADDRESS: TEZede7MQ7q27aq3YpjU17AyaMPeNpRMpv
       DINGO_RPC_HOST: dingocoind
       DINGO_RPC_PORT: '34646'
-      DINGO_RPC_USER: rpcuser
-      DINGO_RPC_PASS: rpcpass
+      DINGO_RPC_USER: umbrel
+      DINGO_RPC_PASS: umbrel
       SHIC_RPC_HOST: shibacoind
       SHIC_RPC_PORT: '33863'
-      SHIC_RPC_USER: rpcuser
-      SHIC_RPC_PASS: rpcpass
+      SHIC_RPC_USER: umbrel
+      SHIC_RPC_PASS: umbrel
       TRMP_RPC_HOST: trumpowd
       TRMP_RPC_PORT: '33883'
-      TRMP_RPC_USER: rpcuser
-      TRMP_RPC_PASS: rpcpass
+      TRMP_RPC_USER: umbrel
+      TRMP_RPC_PASS: umbrel
     volumes:
-      - ./data/pool:/app/data
+      - pool-data:/app/data
       - frontend-build:/frontend/build:ro
-      - ./coins.js:/app/src/config/coins.js:ro
-      - ./server.js:/app/src/stratum/server.js:ro
-      - ./daemonRPC.js:/app/src/services/daemonRPC.js:ro
-      - ./blockMonitor.js:/app/src/services/blockMonitor.js:ro
-      - ./shareProcessor.js:/app/src/services/shareProcessor.js:ro
-      - ./paymentProcessor.js:/app/src/services/paymentProcessor.js:ro
-      - ./index.js:/app/src/index.js:ro
-      - ./utcTimestamps.js:/app/src/middleware/utcTimestamps.js:ro
-      - ./admin.js:/app/src/api/routes/admin.js:ro
-      - ./dockerControl.js:/app/src/services/dockerControl.js:ro
-      - ./auxpow.js:/app/src/stratum/auxpow.js:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${APP_DATA_DIR:-.}/coins.js:/app/src/config/coins.js:ro
+      - ${APP_DATA_DIR:-.}/server.js:/app/src/stratum/server.js:ro
+      - ${APP_DATA_DIR:-.}/auxpow.js:/app/src/stratum/auxpow.js:ro
+      - ${APP_DATA_DIR:-.}/daemonRPC.js:/app/src/services/daemonRPC.js:ro
+      - ${APP_DATA_DIR:-.}/blockMonitor.js:/app/src/services/blockMonitor.js:ro
+      - >-
+        ${APP_DATA_DIR:-.}/shareProcessor.js:/app/src/services/shareProcessor.js:ro
+      - >-
+        ${APP_DATA_DIR:-.}/paymentProcessor.js:/app/src/services/paymentProcessor.js:ro
+      - ${APP_DATA_DIR:-.}/index.js:/app/src/index.js:ro
+      - >-
+        ${APP_DATA_DIR:-.}/utcTimestamps.js:/app/src/middleware/utcTimestamps.js:ro
+      - ${APP_DATA_DIR:-.}/admin.js:/app/src/api/routes/admin.js:ro
+      - >-
+        ${APP_DATA_DIR:-.}/dockerControl.js:/app/src/services/dockerControl.js:ro
     ports:
+      - 3332-3344:3332-3344
       - '8080:8080'
-      - '3332-3344:3332-3344'
+    expose:
+      - '8080'
+    networks:
+      - default
+      - umbrel_main_network
     depends_on:
       init:
         condition: service_completed_successfully
-      litecoind:
-        condition: service_started
-
-  # === Init: fix permissions + copy frontend build ===
+    container_name: happychina-pool_backend_1
   init:
     image: ghcr.io/bobparkerbob888-tech/happychina-pool-frontend:2.1.0
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint:
+      - /bin/sh
+      - '-c'
     command:
       - |
         echo "Copying frontend build files..."
         cp -r /usr/share/nginx/html/* /frontend-build/
-        echo "Fixing data directory permissions..."
-        chmod -R 777 /data/litecoin 2>/dev/null || true
+        if [ -d /custom-build ] && [ "$(ls -A /custom-build 2>/dev/null)" ]; then
+          echo "Overriding with custom frontend build..."
+          cp -r /custom-build/* /frontend-build/
+        fi
         echo "Init complete."
     volumes:
       - frontend-build:/frontend-build
-      - ./data/litecoin:/data/litecoin
-
-  # === Frontend (React + Nginx) ===
+      - ${APP_DATA_DIR:-.}/frontend/build:/custom-build:ro
+    container_name: happychina-pool_init_1
   frontend:
     image: ghcr.io/bobparkerbob888-tech/happychina-pool-frontend:2.1.0
     restart: unless-stopped
     depends_on:
       - backend
-    ports:
-      - '80:80'
-
-  # === Coin Daemons ===
-  litecoind:
-    image: uphold/litecoin-core:0.21
-    restart: unless-stopped
-    stop_grace_period: 15m
     volumes:
-      - ./data/litecoin:/home/litecoin/.litecoin
-    command:
-      - litecoind
-      - '-server=1'
-      - '-rpcuser=rpcuser'
-      - '-rpcpassword=rpcpass'
-      - '-rpcallowip=0.0.0.0/0'
-      - '-rpcbind=0.0.0.0'
-      - '-rpcport=9332'
-      - '-port=9333'
-      - '-txindex=1'
-      - '-printtoconsole'
-      - '-dbcache=4096'
-      - '-maxconnections=1000'
-      - '-par=4'
-    ports:
-      - '9333:9333'
-
-  dogecoind:
-    image: btcpayserver/dogecoin:1.14.9-amd64
-    restart: unless-stopped
-    stop_grace_period: 15m
-    volumes:
-      - ./data/dogecoin:/home/dogecoin/.dogecoin
-    command:
-      - dogecoind
-      - '-server=1'
-      - '-rpcuser=rpcuser'
-      - '-rpcpassword=rpcpass'
-      - '-rpcallowip=0.0.0.0/0'
-      - '-rpcbind=0.0.0.0'
-      - '-rpcport=22555'
-      - '-port=22556'
-      - '-txindex=1'
-      - '-printtoconsole'
-      - '-dbcache=4096'
-      - '-maxconnections=1000'
-      - '-par=4'
-    ports:
-      - '22556:22556'
-
-  pepecoind:
-    image: pepeenthusiast/pepecoin-core:latest
-    restart: unless-stopped
-    stop_grace_period: 15m
-    volumes:
-      - ./data/pepecoin:/home/pepecoin/.pepecoin
-    command:
-      - pepecoind
-      - '-server=1'
-      - '-rpcuser=rpcuser'
-      - '-rpcpassword=rpcpass'
-      - '-rpcallowip=0.0.0.0/0'
-      - '-rpcbind=0.0.0.0'
-      - '-rpcport=29373'
-      - '-port=29374'
-      - '-printtoconsole'
-      - '-dbcache=4096'
-      - '-par=0'
-      - '-maxconnections=1000'
-    ports:
-      - '29374:29374'
-
-  bellsd:
-    image: ghcr.io/bobparkerbob888-tech/bellscoin:3.0
-    restart: unless-stopped
-    stop_grace_period: 15m
-    volumes:
-      - ./data/bells:/root/.bells
-    command:
-      - '-server=1'
-      - '-rpcuser=rpcuser'
-      - '-rpcpassword=rpcpass'
-      - '-rpcallowip=0.0.0.0/0'
-      - '-rpcbind=0.0.0.0'
-      - '-rpcport=19918'
-      - '-port=19919'
-      - '-printtoconsole'
-      - '-dbcache=4096'
-      - '-maxconnections=1000'
-      - '-par=4'
-    ports:
-      - '19919:19919'
-
-  junkcoind:
-    image: btccom/junkcoin:latest
-    restart: unless-stopped
-    stop_grace_period: 15m
-    volumes:
-      - ./data/junkcoin:/root/.junkcoin
-    command:
-      - /usr/local/bin/junkcoind
-      - '-server=1'
-      - '-rpcuser=rpcuser'
-      - '-rpcpassword=rpcpass'
-      - '-rpcallowip=0.0.0.0/0'
-      - '-rpcbind=0.0.0.0'
-      - '-rpcport=9772'
-      - '-port=9771'
-      - '-printtoconsole'
-      - '-dbcache=4096'
-      - '-maxconnections=1000'
-      - '-par=4'
-    ports:
-      - '9771:9771'
-
-  dingocoind:
-    image: ghcr.io/bobparkerbob888-tech/dingocoin:v1.18.0.0
-    restart: unless-stopped
-    stop_grace_period: 15m
-    volumes:
-      - ./data/dingocoin:/root/.dingocoin
-    command:
-      - '-server=1'
-      - '-rpcuser=rpcuser'
-      - '-rpcpassword=rpcpass'
-      - '-rpcallowip=0.0.0.0/0'
-      - '-rpcbind=0.0.0.0'
-      - '-rpcport=34646'
-      - '-port=33117'
-      - '-printtoconsole'
-      - '-dbcache=4096'
-      - '-maxconnections=1000'
-      - '-par=4'
-    ports:
-      - '33117:33117'
-
-  shibacoind:
-    image: ghcr.io/bobparkerbob888-tech/shibacoin:1.2.1
-    restart: unless-stopped
-    stop_grace_period: 15m
-    volumes:
-      - ./data/shibacoin:/root/.shibacoin
-    command:
-      - '-server=1'
-      - '-rpcuser=rpcuser'
-      - '-rpcpassword=rpcpass'
-      - '-rpcallowip=0.0.0.0/0'
-      - '-rpcbind=0.0.0.0'
-      - '-rpcport=33863'
-      - '-port=33864'
-      - '-printtoconsole'
-      - '-dbcache=4096'
-      - '-maxconnections=1000'
-      - '-par=4'
-    ports:
-      - '33864:33864'
-
-  trumpowd:
-    image: ghcr.io/bobparkerbob888-tech/trumpow:1.0
-    restart: unless-stopped
-    stop_grace_period: 15m
-    volumes:
-      - ./data/trumpow:/root/.trumpow
-    command:
-      - '-server=1'
-      - '-rpcuser=rpcuser'
-      - '-rpcpassword=rpcpass'
-      - '-rpcallowip=0.0.0.0/0'
-      - '-rpcbind=0.0.0.0'
-      - '-rpcport=33883'
-      - '-port=33884'
-      - '-printtoconsole'
-      - '-dbcache=4096'
-      - '-par=0'
-      - '-maxconnections=1000'
-    ports:
-      - '33884:33884'
-
+      - frontend-build:/usr/share/nginx/html:ro
+      - ${APP_DATA_DIR:-.}/nginx-default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - default
+      - umbrel_main_network
+    expose:
+      - '80'
+    container_name: happychina-pool_frontend_1
+networks:
+  umbrel_main_network:
+    external: true
 volumes:
-  frontend-build:
+  pool-data: null
+  frontend-build: null
