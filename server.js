@@ -756,6 +756,17 @@ class StratumServer extends EventEmitter {
       case 'mining.extranonce.subscribe':
         this.sendResponse(client, id, true);
         break;
+      case 'mining.suggest_difficulty':
+        if (params && params[0] > 0) {
+          const suggested = params[0];
+          console.log(`[Vardiff] ${client.workerName || client.id}: suggest_difficulty ${suggested}`);
+          client.difficulty = suggested;
+          client.minDifficulty = suggested;
+          this.sendToClient(client, { id: null, method: 'mining.set_difficulty', params: [suggested] });
+          db.prepare('UPDATE workers SET difficulty = ? WHERE id = ?').run(suggested, client.workerId);
+        }
+        this.sendResponse(client, id, true);
+        break;
       case 'login':
         if (message.params && message.params.login) {
           this.handleSubscribe(client, id, [message.params.agent || 'miner']);
@@ -897,17 +908,21 @@ class StratumServer extends EventEmitter {
       ).run(client.socket.remoteAddress, client.algorithm, existing.id);
       client.workerId = existing.id;
 
-      // Restore difficulty from previous session, but cap at 16x the starting difficulty
-      // to avoid restoring an old high difficulty that causes reconnect loops
-      const maxRestoreDiff = client.difficulty * 4;
-      if (existing.difficulty && existing.difficulty > client.difficulty && existing.difficulty <= maxRestoreDiff) {
-        client.difficulty = existing.difficulty;
-        // Send difficulty change - but do NOT send a duplicate job here.
-        // The miner already received a job from handleSubscribe.
-        // Sending a second job during authorize confuses Antminer firmware and causes disconnects.
-        // The difficulty will take effect on the NEXT job (from broadcastJob or template poll).
+      // Sync difficulty from active connections with same worker name (multi-conn rigs)
+      let maxActiveDiff = 0;
+      for (const c of this.clients.values()) {
+        if (c !== client && c.workerName === client.workerName && c.coin === client.coin && c.userId === client.userId && c.authorized) {
+          if (c.difficulty > maxActiveDiff) maxActiveDiff = c.difficulty;
+        }
+      }
+
+      // Prefer active connection difficulty, fall back to DB-saved difficulty
+      const bestDiff = maxActiveDiff || existing.difficulty || 0;
+      const maxRestoreDiff = client.difficulty * 16;
+      if (bestDiff > client.difficulty && bestDiff <= maxRestoreDiff) {
+        client.difficulty = bestDiff;
         this.sendToClient(client, { id: null, method: 'mining.set_difficulty', params: [client.difficulty] });
-        console.log(`[Stratum] Restored difficulty ${client.difficulty.toFixed(2)} for ${client.workerName} on ${client.coin}`);
+        console.log(`[Stratum] Synced difficulty ${client.difficulty.toFixed(0)} for ${client.workerName} (${maxActiveDiff ? 'from active conn' : 'from DB'})`);
       }
     } else {
       const result = db.prepare(
@@ -1316,7 +1331,7 @@ class StratumServer extends EventEmitter {
       .sort((a, b) => b[1].createdAt - a[1].createdAt);
 
     // Keep last 100 jobs per coin
-    for (let i = 100; i < jobEntries.length; i++) {
+    for (let i = 1000; i < jobEntries.length; i++) {
       this.jobs.delete(jobEntries[i][0]);
     }
   }
@@ -1338,11 +1353,10 @@ class StratumServer extends EventEmitter {
     }
   }
 
-  // Variable difficulty adjustment - bulletproof implementation
+  // Variable difficulty adjustment - aggregates across all connections for same worker
   adjustDifficulty(client) {
     const now = Date.now();
     const timeSinceAdjust = (now - client.lastDiffAdjust) / 1000;
-    const connectionAge = (now - client.lastActivity + 1) / 1000; // rough proxy
 
     // Fast ramp: first 5 minutes, adjust every 10s with up to 16x jumps
     // Steady state: after 5 min, adjust every 60s with max 2x changes
@@ -1351,29 +1365,47 @@ class StratumServer extends EventEmitter {
     const minShares = isFastRamp ? 3 : 4;
 
     if (timeSinceAdjust < minInterval) return;
-    if (client.shareTimestamps.length < minShares) return;
 
-    // Calculate average time between shares using recent window
-    const timestamps = client.shareTimestamps;
-    const windowStart = timestamps[0];
-    const windowEnd = timestamps[timestamps.length - 1];
+    // Aggregate share timestamps across ALL connections for this worker name
+    // This ensures multi-connection rigs (like MRR) get proper difficulty
+    const allTimestamps = [];
+    let totalValidShares = 0;
+    let peerCount = 0;
+    for (const c of this.clients.values()) {
+      if (c.workerName === client.workerName && c.coin === client.coin && c.userId === client.userId && c.authorized) {
+        allTimestamps.push(...c.shareTimestamps);
+        totalValidShares += c.shares.valid;
+        peerCount++;
+      }
+    }
+    allTimestamps.sort((a, b) => a - b);
+
+    // Use aggregate fast ramp check (total shares across all connections)
+    const aggFastRamp = totalValidShares < 50;
+    const aggMinShares = aggFastRamp ? 3 : 4;
+
+    if (allTimestamps.length < aggMinShares) return;
+
+    // Calculate average time between shares using recent aggregate window
+    const recent = allTimestamps.slice(-20);
+    const windowStart = recent[0];
+    const windowEnd = recent[recent.length - 1];
     const windowDuration = (windowEnd - windowStart) / 1000;
-    const shareCount = timestamps.length - 1;
+    const shareCount = recent.length - 1;
 
     if (windowDuration <= 0 || shareCount <= 0) return;
 
     const avgInterval = windowDuration / shareCount;
 
-    // Target: one share every 15 seconds
+    // Target: one share every 15 seconds (across all connections combined)
     const targetInterval = 15;
     const ratio = targetInterval / avgInterval;
 
     // Fast ramp: allow aggressive jumps; Steady: require >50% deviation
-    const threshold = isFastRamp ? 1.5 : 2.0;
+    const threshold = aggFastRamp ? 1.5 : 2.0;
     if (ratio < (1/threshold) || ratio > threshold) {
-      // Fast ramp: jump directly to target; Steady: move 50% toward target
       let adjustRatio;
-      if (isFastRamp) {
+      if (aggFastRamp) {
         // Direct jump to target ratio, clamped to 16x
         adjustRatio = Math.max(0.25, Math.min(4, ratio));
       } else {
@@ -1389,9 +1421,8 @@ class StratumServer extends EventEmitter {
         newDifficulty = client.minDifficulty;
       }
 
-      // Minimum difficulty floor (algorithm-specific, not port-locked so vardiff can go lower)
-      const portFloor = 1;
-      newDifficulty = Math.max(portFloor, newDifficulty);
+      // Minimum difficulty floor
+      newDifficulty = Math.max(1, newDifficulty);
 
       // Algorithm-specific upper bounds
       const maxBounds = { sha256: 1e15, scrypt: 1e12 };
@@ -1402,23 +1433,23 @@ class StratumServer extends EventEmitter {
 
       if (Math.abs(newDifficulty - client.difficulty) / client.difficulty > 0.05) {
         const oldDiff = client.difficulty;
-        client.difficulty = newDifficulty;
-        client.lastDiffAdjust = now;
-        // Keep last 3 timestamps for continuity instead of clearing
-        client.shareTimestamps = timestamps.slice(-3);
 
-        this.sendToClient(client, {
-          id: null,
-          method: 'mining.set_difficulty',
-          params: [client.difficulty]
-        });
+        // Apply new difficulty to ALL connections for this worker
+        for (const c of this.clients.values()) {
+          if (c.workerName === client.workerName && c.coin === client.coin && c.userId === client.userId && c.authorized) {
+            c.difficulty = newDifficulty;
+            c.lastDiffAdjust = now;
+            c.shareTimestamps = c.shareTimestamps.slice(-3);
+            this.sendToClient(c, { id: null, method: 'mining.set_difficulty', params: [newDifficulty] });
+          }
+        }
 
         // Save to DB immediately so reconnects get the right difficulty
         if (client.workerId) {
-          db.prepare('UPDATE workers SET difficulty = ? WHERE id = ?').run(client.difficulty, client.workerId);
+          db.prepare('UPDATE workers SET difficulty = ? WHERE id = ?').run(newDifficulty, client.workerId);
         }
 
-        console.log(`[Vardiff] ${client.workerName}/${client.coin}: ${oldDiff.toFixed(0)} -> ${newDifficulty.toFixed(0)} (avg ${avgInterval.toFixed(1)}s, ${shareCount} shares in ${windowDuration.toFixed(0)}s)`);
+        console.log(`[Vardiff] ${client.workerName}/${client.coin}: ${oldDiff.toFixed(0)} -> ${newDifficulty.toFixed(0)} (avg ${avgInterval.toFixed(1)}s, ${shareCount} shares in ${windowDuration.toFixed(0)}s, ${peerCount} conns)`);
       }
     }
   }

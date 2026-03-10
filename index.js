@@ -100,6 +100,22 @@ cron.schedule("*/10 * * * *", () => {
   ).run();
 });
 
+// Auto-delete offline workers after 1 hour (they auto-recreate on reconnect via registerWorker)
+cron.schedule("*/15 * * * *", () => {
+  try {
+    const offlineIds = db.prepare(
+      "SELECT id FROM workers WHERE is_online = 0 AND disconnected_at < datetime(\"now\", \"-1 hour\")"
+    ).all().map(w => w.id);
+    if (offlineIds.length > 0) {
+      const ph = offlineIds.map(() => "?").join(",");
+      db.prepare("DELETE FROM shares WHERE worker_id IN (" + ph + ")").run(...offlineIds);
+      const r = db.prepare("DELETE FROM workers WHERE id IN (" + ph + ")").run(...offlineIds);
+      if (r.changes > 0) console.log("[Cleanup] Removed " + r.changes + " workers offline >1 hour");
+    }
+  } catch (e) {
+    console.error("[Cleanup] Worker cleanup error:", e.message);
+  }
+});
 
 // Prune old shares every 10 minutes (keep last 2 hours to prevent DB bloat)
 cron.schedule("*/10 * * * *", () => {
