@@ -96,7 +96,7 @@ cron.schedule("*/5 * * * *", () => {
 // which caused format mismatch (ISO "T" vs SQLite space) marking ALL workers offline
 cron.schedule("*/10 * * * *", () => {
   db.prepare(
-    "UPDATE workers SET is_online = 0 WHERE is_online = 1 AND (last_share IS NULL OR last_share < datetime(\"now\", \"-15 minutes\")) AND (connected_at IS NULL OR connected_at < datetime(\"now\", \"-15 minutes\"))"
+    "UPDATE workers SET is_online = 0 WHERE is_online = 1 AND (last_share IS NULL OR last_share < datetime('now', '-15 minutes')) AND (connected_at IS NULL OR connected_at < datetime('now', '-15 minutes'))"
   ).run();
 });
 
@@ -104,7 +104,7 @@ cron.schedule("*/10 * * * *", () => {
 cron.schedule("*/15 * * * *", () => {
   try {
     const offlineIds = db.prepare(
-      "SELECT id FROM workers WHERE is_online = 0 AND disconnected_at < datetime(\"now\", \"-1 hour\")"
+      "SELECT id FROM workers WHERE is_online = 0 AND disconnected_at < datetime('now', '-1 hour')"
     ).all().map(w => w.id);
     if (offlineIds.length > 0) {
       const ph = offlineIds.map(() => "?").join(",");

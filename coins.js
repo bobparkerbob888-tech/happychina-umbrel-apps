@@ -12,7 +12,7 @@ const coins = {
     // Multiple difficulty ports - vardiff ramps up from starting diff
     stratumPorts: [
       { port: 3332, diff: 500000000, label: 'Vardiff 500M start (Big rental rigs)' },
-      { port: 3333, diff: 1048576, fixedDiff: true, label: 'Fixed Diff 1M (ASIC miners)' },
+      { port: 3333, diff: 1048576, label: 'Vardiff 1M start (ASIC miners)' },
       { port: 3344, diff: 8,    label: 'Low Diff (CPU/GPU miners)' }
     ],
     reward: 6.25,

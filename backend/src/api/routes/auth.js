@@ -37,9 +37,13 @@ router.post('/register', (req, res) => {
     const hashedPassword = bcrypt.hashSync(password, 10);
     const apiKey = uuidv4();
 
+    // First registered user becomes admin
+    const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+    const isAdmin = userCount === 0 ? 1 : 0;
+
     const result = db.prepare(
-      'INSERT INTO users (username, email, password, wallet_address, api_key) VALUES (?, ?, ?, ?, ?)'
-    ).run(username, email, hashedPassword, wallet_address || '', apiKey);
+      'INSERT INTO users (username, email, password, wallet_address, api_key, is_admin) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(username, email, hashedPassword, wallet_address || '', apiKey, isAdmin);
 
     const token = jwt.sign({ userId: result.lastInsertRowid }, config.jwtSecret, { expiresIn: '7d' });
 
