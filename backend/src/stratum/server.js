@@ -1257,7 +1257,12 @@ class StratumServer extends EventEmitter {
     // The block header merkle root is always computed from txids per BIP141
     const merkleBranches = [];
     if (template.transactions && template.transactions.length > 0) {
-      const txHashes = template.transactions.map(tx => tx.txid || tx.hash);
+      // getblocktemplate returns txids in RPC byte order (reversed)
+      // Merkle tree needs internal byte order (natural sha256d output)
+      const txHashes = template.transactions.map(tx => {
+        const h = tx.txid || tx.hash;
+        return Buffer.from(h, 'hex').reverse().toString('hex');
+      });
       this.computeMerkleBranches(txHashes, merkleBranches);
     }
 
@@ -1510,7 +1515,11 @@ class StratumServer extends EventEmitter {
       const header = buildHeaderYiimp(versionHex, job.prevHashStratum, merkleRoot, nTime, job.nbits, nonce);
 
       // Compute coinbase merkle branch (path from coinbase to parent merkle root)
-      const txHashes = job.template.transactions.map(tx => tx.txid || tx.hash);
+      // Reverse txids from RPC byte order to internal byte order for merkle computation
+      const txHashes = job.template.transactions.map(tx => {
+        const h = tx.txid || tx.hash;
+        return Buffer.from(h, 'hex').reverse().toString('hex');
+      });
       const coinbaseMerkleBranch = auxpow.computeCoinbaseMerkleBranch(coinbaseHash, txHashes);
 
       // Get aux merkle branch for this specific chain
