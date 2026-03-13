@@ -523,8 +523,8 @@ class StratumServer extends EventEmitter {
 
     // Initial fetch
     poll();
-    // Poll every 5 seconds
-    const interval = setInterval(poll, 5000);
+    // Poll every 2 seconds
+    const interval = setInterval(poll, 2000);
     this.templatePollers.set(coinId, interval);
 
     // Periodic job refresh: send new jobs every 30s even without new blocks
