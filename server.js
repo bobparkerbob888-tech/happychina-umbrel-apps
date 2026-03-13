@@ -523,8 +523,8 @@ class StratumServer extends EventEmitter {
 
     // Initial fetch
     poll();
-    // Poll every 5 seconds
-    const interval = setInterval(poll, 5000);
+    // Poll every 1 second to minimize stale work window
+    const interval = setInterval(poll, 1000);
     this.templatePollers.set(coinId, interval);
 
     // Periodic job refresh: send new jobs every 30s even without new blocks
@@ -1081,6 +1081,24 @@ class StratumServer extends EventEmitter {
       if (submitResult === null || submitResult === undefined || submitResult === '' || submitResult === 'inconclusive') {
         // Success - null/empty means accepted
         console.log(`[Stratum] Block ACCEPTED by ${coin.name} daemon!`);
+
+        // Immediately refresh template and broadcast to miners so they stop working on stale block
+        try {
+          const rules = [];
+          if (coin.segwit) rules.push('segwit');
+          if (coin.mweb) rules.push('mweb');
+          const newTemplate = await daemon.getBlockTemplate(rules);
+          const poolSpk = this.poolScriptPubKeys.get(client.coin);
+          if (poolSpk) newTemplate._poolScriptPubKey = poolSpk;
+          this.templates.set(client.coin, newTemplate);
+          if (this.mergeGroups.has(client.coin)) {
+            await this.refreshAuxBlocks(client.coin);
+          }
+          this.broadcastJob(client.coin, true); // cleanJobs=true to flush stale work
+          console.log(`[Stratum] Immediate template refresh after block: ${coin.name} height=${newTemplate.height}`);
+        } catch (e) {
+          console.error(`[Stratum] Post-block template refresh failed for ${coin.name}: ${e.message}`);
+        }
 
         // Get the actual reward from template
         const reward = template.coinbasevalue / 1e8;

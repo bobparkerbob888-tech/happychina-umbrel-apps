@@ -183,7 +183,9 @@ class BlockMonitor {
           this.shareProcessor.orphanBlock(block.id);
         }
       } catch {
-        // Block might not be found - could be orphaned
+        // Block not found by daemon - mark as orphaned
+        console.log(`[BlockMonitor] Block ${block.coin} height=${block.height} hash=${block.hash.substring(0, 16)}... not found - marking orphaned`);
+        this.shareProcessor.orphanBlock(block.id);
       }
     }
 

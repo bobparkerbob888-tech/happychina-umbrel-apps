@@ -413,6 +413,9 @@ class StratumServer extends EventEmitter {
         this.startTemplatePolling(coinId, coin);
       }
     }
+    // Heartbeat: mark connected workers as online every 10s
+    setInterval(() => this.updateWorkerHeartbeats(), 10000);
+
     console.log('[Stratum] All coin servers started');
   }
 
@@ -753,6 +756,9 @@ class StratumServer extends EventEmitter {
       case 'mining.configure':
         this.handleConfigure(client, id, params);
         break;
+      case 'mining.suggest_difficulty':
+        this.handleSuggestDifficulty(client, id, params);
+        break;
       case 'mining.extranonce.subscribe':
         this.sendResponse(client, id, true);
         break;
@@ -801,6 +807,42 @@ class StratumServer extends EventEmitter {
 
     this.sendResponse(client, id, result);
     console.log(`[Stratum] mining.configure from ${client.id}: extensions=${extensions.join(',')}`);
+  }
+
+  handleSuggestDifficulty(client, id, params) {
+    if (!params || params.length < 1) {
+      this.sendResponse(client, id, true);
+      return;
+    }
+
+    let suggestedDiff = parseFloat(params[0]);
+    if (!suggestedDiff || suggestedDiff <= 0) {
+      this.sendResponse(client, id, true);
+      return;
+    }
+
+    // Clamp to sane bounds
+    const minDiff = 1;
+    const maxDiff = 1e15;
+    suggestedDiff = Math.max(minDiff, Math.min(maxDiff, suggestedDiff));
+
+    const oldDiff = client.difficulty;
+    client.difficulty = suggestedDiff;
+    // Override fixedDiff so vardiff doesn't fight the suggested value
+    client.fixedDiff = false;
+    // Set as minimum so vardiff won't go below what the rig asked for
+    client.minDifficulty = suggestedDiff;
+
+    console.log(`[Stratum] mining.suggest_difficulty from ${client.workerName || client.id}: ${oldDiff} -> ${suggestedDiff}`);
+
+    // Send the new difficulty
+    this.sendToClient(client, {
+      id: null,
+      method: 'mining.set_difficulty',
+      params: [client.difficulty]
+    });
+
+    this.sendResponse(client, id, true);
   }
 
   handleSubscribe(client, id, params) {
@@ -1315,8 +1357,8 @@ class StratumServer extends EventEmitter {
       .filter(([, job]) => job.coinId === coinId)
       .sort((a, b) => b[1].createdAt - a[1].createdAt);
 
-    // Keep last 100 jobs per coin
-    for (let i = 100; i < jobEntries.length; i++) {
+    // Keep last 5000 jobs per coin (each client gets unique job IDs)
+    for (let i = 5000; i < jobEntries.length; i++) {
       this.jobs.delete(jobEntries[i][0]);
     }
   }
