@@ -126,7 +126,7 @@ const DAEMON_CONFIGS = {
   },
   dogecoin: {
     service: 'dogecoind',
-    image: 'btcpayserver/dogecoin:1.14.9-amd64',
+    image: 'ghcr.io/bobparkerbob888-tech/dogecoin:1.14.9',
     dataDir: '/home/dogecoin/.dogecoin',
     cmd: ['dogecoind', '-server=1', '-rpcuser=umbrel', '-rpcpassword=umbrel', '-rpcallowip=0.0.0.0/0', '-rpcbind=0.0.0.0', '-rpcport=22555', '-port=22556', '-txindex=1', '-printtoconsole', '-maxconnections=4', '-maxuploadtarget=200']
   },
@@ -150,7 +150,7 @@ const DAEMON_CONFIGS = {
   },
   junkcoin: {
     service: 'junkcoind',
-    image: 'btccom/junkcoin:latest',
+    image: 'ghcr.io/bobparkerbob888-tech/junkcoin:3.1.1',
     dataDir: '/root/.junkcoin',
     cmd: ['/usr/local/bin/junkcoind', '-server=1', '-rpcuser=umbrel', '-rpcpassword=umbrel', '-rpcallowip=0.0.0.0/0', '-rpcbind=0.0.0.0', '-rpcport=9772', '-port=9771', '-printtoconsole', '-addnode=103.133.25.201:9771', '-addnode=mainnet.junk-coin.com', '-addnode=junk-seed.s3na.xyz', '-addnode=jkc-seed.junkiewally.xyz', '-maxconnections=8']
   },
