@@ -100,6 +100,19 @@ cron.schedule("*/10 * * * *", () => {
   ).run();
 });
 
+// Delete workers offline for more than 1 hour (declutter dashboard)
+cron.schedule("*/10 * * * *", () => {
+  try {
+    const result = db.prepare(
+      "DELETE FROM workers WHERE is_online = 0 AND last_share < datetime('now', '-1 hour')"
+    ).run();
+    if (result.changes > 0) {
+      console.log("[Cleanup] Removed " + result.changes + " stale workers (offline >1hr)");
+    }
+  } catch (err) {
+    console.error("[Cleanup] Worker prune error:", err.message);
+  }
+});
 
 // Prune old shares every 10 minutes (keep last 2 hours to prevent DB bloat)
 cron.schedule("*/10 * * * *", () => {

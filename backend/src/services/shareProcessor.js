@@ -21,15 +21,18 @@ class ShareProcessor {
     const fee = reward * (config.pool.fee / 100);
     const minerReward = reward - fee;
 
+    // For merge-mined coins, shares are recorded under the parent chain (e.g. "litecoin")
+    // not under the aux coin (e.g. "dogecoin"). Use parent chain for PPLNS lookup.
+    const shareCoin = coin.mergeMinedWith || block.coin;
+
     // Get last N shares for PPLNS
     const shares = db.prepare(`
       SELECT user_id, SUM(difficulty) as total_diff
       FROM shares
       WHERE coin = ? AND is_valid = 1
-      AND id <= (SELECT MAX(id) FROM shares WHERE is_block = 1 AND coin = ?)
       ORDER BY id DESC
       LIMIT ?
-    `).all(block.coin, block.coin, this.windowSize);
+    `).all(shareCoin, this.windowSize);
 
     if (shares.length === 0) return;
 
