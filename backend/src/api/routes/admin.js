@@ -283,4 +283,48 @@ router.get('/payments', (req, res) => {
   });
 });
 
+// Admin balances - view all user balances, set payout addresses, sweep
+router.get('/balances', (req, res) => {
+  const { page = 1, limit = 50, coin, search = '' } = req.query;
+  const offset = (page - 1) * limit;
+
+  let query = `SELECT b.*, u.username, u.wallet_address FROM balances b JOIN users u ON b.user_id = u.id`;
+  let countQuery = `SELECT COUNT(*) as total FROM balances b JOIN users u ON b.user_id = u.id`;
+  const conditions = [];
+  const params = [];
+
+  if (coin) { conditions.push('b.coin = ?'); params.push(coin); }
+  if (search) { conditions.push('u.username LIKE ?'); params.push(`%${search}%`); }
+
+  if (conditions.length) {
+    const where = ' WHERE ' + conditions.join(' AND ');
+    query += where;
+    countQuery += where;
+  }
+
+  query += ' ORDER BY b.confirmed DESC LIMIT ? OFFSET ?';
+
+  const balances = db.prepare(query).all(...params, parseInt(limit), parseInt(offset));
+  const { total } = db.prepare(countQuery).get(...params);
+
+  const coinTotals = db.prepare(`
+    SELECT coin, SUM(pending) as total_pending, SUM(confirmed) as total_confirmed, SUM(paid) as total_paid
+    FROM balances GROUP BY coin
+  `).all();
+
+  res.json({
+    balances,
+    coinTotals,
+    pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / limit) }
+  });
+});
+
+router.post('/balances/:userId/address', (req, res) => {
+  const { userId } = req.params;
+  const { address } = req.body;
+  if (!address) return res.status(400).json({ error: 'Address required' });
+  db.prepare('UPDATE users SET wallet_address = ? WHERE id = ?').run(address, userId);
+  res.json({ message: 'Payout address updated' });
+});
+
 module.exports = router;

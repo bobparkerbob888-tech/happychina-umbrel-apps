@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   getAdminDashboard, getAdminUsers, getAdminSettings, updateAdminSettings,
   banUser, toggleAdmin, processPayments, getAdminPayments, getDaemonStatus,
-  getAdminCoins, updateAdminCoin
+  getAdminCoins, updateAdminCoin, getAdminBalances, updatePayoutAddress
 } from '../services/api';
 
 function Admin() {
@@ -16,7 +16,7 @@ function Admin() {
       </div>
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: '1px solid var(--border)', paddingBottom: 0 }}>
-        {['overview', 'settings', 'coins', 'users', 'payments'].map(t => (
+        {['overview', 'balances', 'settings', 'coins', 'users', 'payments'].map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -32,6 +32,7 @@ function Admin() {
       </div>
 
       {tab === 'overview' && <OverviewTab />}
+      {tab === 'balances' && <BalancesTab />}
       {tab === 'settings' && <SettingsTab />}
       {tab === 'coins' && <CoinsTab />}
       {tab === 'users' && <UsersTab />}
@@ -131,6 +132,124 @@ function OverviewTab() {
             </table>
           ) : <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>No payments yet</div>}
         </div>
+      </div>
+    </>
+  );
+}
+
+function BalancesTab() {
+  const [data, setData] = useState({ balances: [], coinTotals: [], pagination: {} });
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [editAddr, setEditAddr] = useState({});
+  const [saving, setSaving] = useState(null);
+
+  const load = (p = page, s = search) => {
+    setLoading(true);
+    getAdminBalances({ page: p, limit: 50, search: s }).then(res => {
+      setData(res.data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+
+  useEffect(() => { load(1); }, []); // eslint-disable-line
+
+  const handleSearch = (e) => { e.preventDefault(); setPage(1); load(1, search); };
+
+  const handleSaveAddr = async (userId) => {
+    setSaving(userId);
+    try {
+      await updatePayoutAddress(userId, editAddr[userId]);
+      setEditAddr(prev => { const n = {...prev}; delete n[userId]; return n; });
+      load();
+    } catch {} finally { setSaving(null); }
+  };
+
+  return (
+    <>
+      {data.coinTotals.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(data.coinTotals.length, 4)}, 1fr)`, gap: 12, marginBottom: 20 }}>
+          {data.coinTotals.map(ct => (
+            <div className="card" key={ct.coin} style={{ padding: 16, textAlign: 'center' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>{ct.coin}</div>
+              <div style={{ fontSize: 13, marginTop: 8 }}>
+                <span style={{ color: '#ffa726' }}>{Number(ct.total_pending).toFixed(8)}</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: 10 }}> pending</span>
+              </div>
+              <div style={{ fontSize: 13 }}>
+                <span style={{ color: 'var(--green)' }}>{Number(ct.total_confirmed).toFixed(8)}</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: 10 }}> confirmed</span>
+              </div>
+              <div style={{ fontSize: 13 }}>
+                <span style={{ color: 'var(--text-secondary)' }}>{Number(ct.total_paid).toFixed(8)}</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: 10 }}> paid</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-header">
+          <h2>User Balances ({data.pagination.total || 0})</h2>
+          <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8 }}>
+            <input type="text" className="form-input" placeholder="Search users..." value={search}
+              onChange={e => setSearch(e.target.value)} style={{ width: 200, padding: '6px 12px', fontSize: 13 }} />
+            <button type="submit" className="btn btn-sm btn-secondary">Search</button>
+          </form>
+        </div>
+
+        {loading ? <div className="spinner" /> : (
+          <>
+            <table className="data-table" style={{ width: '100%' }}>
+              <thead>
+                <tr><th>User</th><th>Coin</th><th>Pending</th><th>Confirmed</th><th>Paid</th><th>Payout Address</th></tr>
+              </thead>
+              <tbody>
+                {data.balances.length === 0 ? (
+                  <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No balances</td></tr>
+                ) : data.balances.map(b => (
+                  <tr key={`${b.user_id}-${b.coin}`}>
+                    <td>{b.username}</td>
+                    <td>{b.coin}</td>
+                    <td style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12, color: '#ffa726' }}>{Number(b.pending).toFixed(8)}</td>
+                    <td style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12, color: 'var(--green)' }}>{Number(b.confirmed).toFixed(8)}</td>
+                    <td style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }}>{Number(b.paid).toFixed(8)}</td>
+                    <td>
+                      {editAddr[b.user_id] !== undefined ? (
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <input type="text" className="form-input" value={editAddr[b.user_id]}
+                            onChange={e => setEditAddr(prev => ({...prev, [b.user_id]: e.target.value}))}
+                            style={{ padding: '4px 8px', fontSize: 11, width: 200 }} />
+                          <button className="btn btn-sm btn-primary" onClick={() => handleSaveAddr(b.user_id)}
+                            disabled={saving === b.user_id}>{saving === b.user_id ? '...' : 'Save'}</button>
+                          <button className="btn btn-sm btn-secondary"
+                            onClick={() => setEditAddr(prev => { const n={...prev}; delete n[b.user_id]; return n; })}>X</button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                          <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block' }}>
+                            {b.wallet_address || '-'}
+                          </span>
+                          <button className="btn btn-sm btn-secondary" style={{ padding: '2px 6px', fontSize: 10 }}
+                            onClick={() => setEditAddr(prev => ({...prev, [b.user_id]: b.wallet_address || ''}))}>Edit</button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {data.pagination.pages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 16 }}>
+                <button className="btn btn-sm btn-secondary" disabled={page <= 1} onClick={() => { setPage(page - 1); load(page - 1); }}>Prev</button>
+                <span style={{ padding: '6px 12px', fontSize: 13, color: 'var(--text-secondary)' }}>Page {page} of {data.pagination.pages}</span>
+                <button className="btn btn-sm btn-secondary" disabled={page >= data.pagination.pages} onClick={() => { setPage(page + 1); load(page + 1); }}>Next</button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </>
   );

@@ -70,5 +70,7 @@ export const updateAdminSettings = (data) => api.put('/admin/settings', data);
 export const getAdminPayments = (params) => api.get('/admin/payments', { params });
 export const getAdminCoins = () => api.get('/admin/coins');
 export const updateAdminCoin = (coinId, data) => api.put(`/admin/coins/${coinId}`, data);
+export const getAdminBalances = (params) => api.get('/admin/balances', { params });
+export const updatePayoutAddress = (userId, address) => api.post(`/admin/balances/${userId}/address`, { address });
 
 export default api;
